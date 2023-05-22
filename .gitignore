@@ -1,0 +1,10 @@
+*.pth
+.python
+*.pyc
+/*.egg-info
+**/__pycache__
+**/.vscode
+*.so
+.venv
+/_skbuild
+/.eggs
