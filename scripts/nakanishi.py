@@ -18,9 +18,9 @@ except ModuleNotFoundError:
         def __init__(self, *args, **kwargs):
             raise RuntimeError('Please install aim!')
 
-from src.emicore.bayesopt import DataSampler
+from src.emicore.bayesopt.util import DataSampler
 
-from src.emicore.qc import measure_overlap, measure_energy
+from src.emicore.qc.qiskit import measure_overlap, measure_energy
 from src.emicore.energy import BACKENDS
 
 

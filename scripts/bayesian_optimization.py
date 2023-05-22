@@ -10,37 +10,21 @@ import click
 import torch
 import h5py
 import numpy as np
-from aim import Run
-# from aim.storage.object import CustomObject
-# from aim.storage.types import BLOB
 from tqdm import tqdm
 
-from src.emicore.bayesopt import BayesianOptimization
-from src.emicore.bayesopt import GaussianProcess, KERNELS
-from src.emicore.bayesopt import DataSampler
+from src.emicore.bayesopt.bo import BayesianOptimization
+from src.emicore.bayesopt.gp import GaussianProcess, KERNELS
+from src.emicore.bayesopt.util import DataSampler
 
 from src.emicore.utils import grid_search_gamma, interval_schedule
 from src.emicore.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
 from src.emicore.cli import namedtuple_as_dict, final_property
 
-
-# class PercentileDist(CustomObject):
-#     AIM_NAME = 'aim.distribution'
-#
-#     def __init__(self, values):
-#         super().__init__()
-#         self.storage['bin_count'] = len(values)
-#         self.storage['dtype'] = str(values.dtype)
-#         self.storage['range'] = [0., 1.]
-#         self.storage['data'] = BLOB(data=values.tobytes())
-
-
 @click.group()
 @click.option('--seed', type=int, default=0xDEADBEEF)
-@click.option('--aim-repo', type=click.Path(writable=True, file_okay=False))
 @click.option('--json-log', type=click.Path(writable=True, dir_okay=False))
 @click.pass_context
-def main(ctx, seed, aim_repo, json_log):
+def main(ctx, seed, json_log):
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -51,11 +35,7 @@ def main(ctx, seed, aim_repo, json_log):
     ctx.ensure_object(Namespace)
     ctx.obj.rng = np.random.default_rng(seed)
 
-    if aim_repo is not None:
-        ctx.obj.run = Run(experiment='bayesian_optimization', repo=aim_repo)
-        ctx.obj.run['seed'] = seed
-    else:
-        ctx.obj.run = None
+    ctx.obj.run = None
 
     if json_log is not None:
         ctx.obj.json_log = json_log

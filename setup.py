@@ -11,14 +11,12 @@ setup(
         'tqdm',
         'matplotlib',
         'click',
-        'tensorboard',
         'joblib',
         'scipy',
         'noisyopt',
         'scikit-learn',
         'qiskit',
         'h5py',
-        'aim'
     ],
     setup_requires=[
         'setuptools_scm',

@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from src.emicore.qc import measure_energy as measure_energy_qiskit
-from src.emicore.qc import parameter_shift_gradient as parameter_shift_gradient_qiskit
+from src.emicore.qc.qiskit import measure_energy as measure_energy_qiskit
+from src.emicore.qc.qiskit import parameter_shift_gradient as parameter_shift_gradient_qiskit
 
 BACKENDS = {}
 
