@@ -15,13 +15,13 @@ from aim import Run
 # from aim.storage.types import BLOB
 from tqdm import tqdm
 
-from src.bayesopt.bo import BayesianOptimization
-from src.bayesopt.gp import GaussianProcess, KERNELS
-from src.bayesopt.util import DataSampler
+from src.emicore.bayesopt import BayesianOptimization
+from src.emicore.bayesopt import GaussianProcess, KERNELS
+from src.emicore.bayesopt import DataSampler
 
-from src.utils import grid_search_gamma, interval_schedule
-from src.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
-from src.cli import namedtuple_as_dict, final_property
+from src.emicore.utils import grid_search_gamma, interval_schedule
+from src.emicore.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
+from src.emicore.cli import namedtuple_as_dict, final_property
 
 
 # class PercentileDist(CustomObject):

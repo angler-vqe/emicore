@@ -3,11 +3,11 @@ from functools import partial
 
 import torch
 import numpy as np
-from src.qc.numpy import exact_spectrum
-from src.qc.qiskit import measure_energy_variance, measure_overlap, measure_energy
-from src.energy import BACKENDS
-from src.utils import circuit_param_size
-from src.cli import arrcache
+from src.emicore.qc.numpy import exact_spectrum
+from src.emicore.qc.qiskit import measure_energy_variance, measure_overlap, measure_energy
+from src.emicore.energy import BACKENDS
+from src.emicore.utils import circuit_param_size
+from src.emicore.cli import arrcache
 
 
 class DataSampler:

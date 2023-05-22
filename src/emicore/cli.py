@@ -12,11 +12,11 @@ import h5py
 import numpy as np
 import torch
 
-from src.energy import BACKENDS
-from src.bayesopt.gp import KERNELS
-from src.bayesopt.bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
-from src.bayesopt.bo import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
-from src.bayesopt.bo import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
+from src.emicore.energy import BACKENDS
+from src.emicore.bayesopt import KERNELS
+from src.emicore.bayesopt import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
+from src.emicore.bayesopt import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
+from src.emicore.bayesopt import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
 
 
 class FinalProperties:

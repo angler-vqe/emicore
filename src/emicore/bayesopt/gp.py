@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from sklearn.model_selection import LeaveOneOut
 
-from ..utils import SingularGramError
+from src.emicore.utils import SingularGramError
 
 
 KERNELS = {}

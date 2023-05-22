@@ -17,7 +17,7 @@ from qiskit.quantum_info import state_fidelity
 from qiskit.utils import QuantumInstance
 from qiskit.circuit import Parameter
 
-from src.utils import expand_params
+from src.emicore.utils import expand_params
 
 
 def heisenberg_hamiltonian(n_qbits, j=[1.0, 1.0, 1.0], h=[0.0, 0.0, 1.0], pbc=True):

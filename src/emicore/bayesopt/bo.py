@@ -6,7 +6,7 @@ import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from scipy.optimize import minimize
 
-from ..utils import SingularGramError
+from src.emicore.utils import SingularGramError
 
 
 class BayesianOptimization:

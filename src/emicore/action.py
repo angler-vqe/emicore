@@ -1,5 +1,5 @@
-from .energy import BACKENDS
-from .utils import circuit_param_size
+from src.emicore.energy import BACKENDS
+from src.emicore.utils import circuit_param_size
 
 
 _actions = {}

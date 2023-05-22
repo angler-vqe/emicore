@@ -18,10 +18,10 @@ except ModuleNotFoundError:
         def __init__(self, *args, **kwargs):
             raise RuntimeError('Please install aim!')
 
-from src.bayesopt.util import DataSampler
+from src.emicore.bayesopt import DataSampler
 
-from src.qc.qiskit import measure_overlap, measure_energy
-from src.energy import BACKENDS
+from src.emicore.qc import measure_overlap, measure_energy
+from src.emicore.energy import BACKENDS
 
 
 def nakanishi_step(x_start, y_start, k_dim, true_energy):
