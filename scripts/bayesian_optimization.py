@@ -10,37 +10,21 @@ import click
 import torch
 import h5py
 import numpy as np
-from aim import Run
-# from aim.storage.object import CustomObject
-# from aim.storage.types import BLOB
 from tqdm import tqdm
 
-from src.bayesopt.bo import BayesianOptimization
-from src.bayesopt.gp import GaussianProcess, KERNELS
-from src.bayesopt.util import DataSampler
+from emicore.bo import BayesianOptimization
+from emicore.gp import GaussianProcess, KERNELS
 
-from src.utils import grid_search_gamma, interval_schedule
-from src.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
-from src.cli import namedtuple_as_dict, final_property
-
-
-# class PercentileDist(CustomObject):
-#     AIM_NAME = 'aim.distribution'
-#
-#     def __init__(self, values):
-#         super().__init__()
-#         self.storage['bin_count'] = len(values)
-#         self.storage['dtype'] = str(values.dtype)
-#         self.storage['range'] = [0., 1.]
-#         self.storage['data'] = BLOB(data=values.tobytes())
+from emicore.util import DataSampler, grid_search_gamma, interval_schedule
+from emicore.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
+from emicore.cli import namedtuple_as_dict, final_property
 
 
 @click.group()
 @click.option('--seed', type=int, default=0xDEADBEEF)
-@click.option('--aim-repo', type=click.Path(writable=True, file_okay=False))
 @click.option('--json-log', type=click.Path(writable=True, dir_okay=False))
 @click.pass_context
-def main(ctx, seed, aim_repo, json_log):
+def main(ctx, seed, json_log):
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -50,12 +34,6 @@ def main(ctx, seed, aim_repo, json_log):
 
     ctx.ensure_object(Namespace)
     ctx.obj.rng = np.random.default_rng(seed)
-
-    if aim_repo is not None:
-        ctx.obj.run = Run(experiment='bayesian_optimization', repo=aim_repo)
-        ctx.obj.run['seed'] = seed
-    else:
-        ctx.obj.run = None
 
     if json_log is not None:
         ctx.obj.json_log = json_log
@@ -93,9 +71,7 @@ class BayesOptCLI:
             self.args.j_coupling,
             self.args.h_coupling,
             n_readout=self.args.n_readout,
-            n_free_angles=self.args.free_angles,
             sector=self.args.sector,
-            backend=self.args.backend,
             circuit=self.args.circuit,
             noise_level=self.args.noise_level,
             pbc=self.args.pbc,
@@ -139,12 +115,8 @@ class BayesOptCLI:
 
         kernel_kwargs = {
             'vqe': {'sigma_0': sigma_0, 'gamma': gamma},
-            'sharedvqe': {'sigma_0': sigma_0, 'gamma': gamma, 'eta': 1.0, 'share': self.args.n_qbits},
             'rbf': {'sigma_0': sigma_0, 'gamma': gamma},
             'periodic': {'sigma_0': sigma_0, 'gamma': gamma},
-            'matern': {'nu': 2.5},
-            'torusrbf': {'sigma_0': sigma_0, 'gamma': gamma},
-            'torusmatern': {'nu': 2.5},
         }[self.args.kernel]
 
         return KERNELS[self.args.kernel](**kernel_kwargs)
@@ -212,16 +184,6 @@ class BayesOptCLI:
             if 'x_start' in state and 'k_best' in state:
                 observables['k_last'] = int(np.ravel_multi_index(state['k_best'], state['x_start'].shape))
 
-            if self.ctx.obj.run is not None:
-                if 'acq_dir_perc' in state:
-                    # aim_observables['acq_dir_perc'] = PercentileDist(state['acq_dir_perc'])
-                    for n, value in enumerate(np.percentile(state['acq_dir_perc'], np.linspace(0., 100., 11))):
-                        self.ctx.obj.run.track(
-                            value, name='acq_dir_perc', step=state['step'], context={'percentile': n * 10}
-                        )
-                for key, value in observables.items():
-                    self.ctx.obj.run.track(value, name=key, step=state['step'])
-
             if self.ctx.obj.json_log is not None:
                 with open(self.ctx.obj.json_log, 'a') as fd:
                     json.dump(observables, fd)
@@ -232,7 +194,7 @@ class BayesOptCLI:
                 f'last energy: {observables["y_start"]:.3e}, '
                 f'true energy: {y_true:.3e}, '
                 f'best energy: {observables["y_best"]:.3e}, '
-                f'gamma: {observables.get("kernel.gamma")}'
+                f'gamma: {observables.get("kernel.gamma"):.3f}'
             )
 
             storables = (
@@ -273,25 +235,6 @@ class BayesOptCLI:
             'mll': self.model.log_likelihood,
         }[self.args.hyperopt.loss]
 
-    @final_property
-    def kernel_optim(self):
-        if self.args.hyperopt.optim != 'adam':
-            raise RuntimeError(f'Cannot use kernel_optim with {self.args.hyperopt.optim}!')
-        params = list(self.kernel.parameters())
-        for param in params:
-            param.requires_grad = True
-        if not params:
-            logging.warning(f'{self.kernel} has no hyper parameters to optimize!')
-        return torch.optim.Adam(params, lr=self.args.hyperopt.lr)
-
-    @final_property
-    def n_iter(self):
-        if self.args.iter_mode == 'qc' and self.args.acq_params.optim == 'mexicore':
-            # TODO: this does not consider stabilize_interval
-            return (self.args.n_iter - self.args.train_samples) // 2
-
-        return self.args.n_iter
-
     def hyperopt(self, step):
         if self.args.hyperopt.optim == 'grid':
             if self.interval(step):
@@ -304,14 +247,6 @@ class BayesOptCLI:
                     num=self.args.hyperopt.steps,
                     loss=self.args.hyperopt.loss
                 )
-        elif self.args.hyperopt.optim == 'adam':
-            if self.interval(step):
-                for step in range(self.args.hyperopt.steps):
-                    self.kernel_optim.zero_grad()
-                    loss = self.lossfn()
-                    loss.backward()
-                    self.kernel_optim.step()
-                    self.model.reinit()
 
 
 @main.command('train')
@@ -325,29 +260,18 @@ def train(ctx, **kwargs):
     ns = BayesOptCLI(args, ctx)
     start_time = time.time()
 
-    if ctx.obj.run is not None:
-        ctx.obj.run['params'] = ctx.params
-        ctx.obj.run['true_energy'] = {
-            'e0': ns.true_solution.e0.item(),
-            'e1': ns.true_solution.e1.item(),
-        }
-
     ns.log['gamma_history'].append(ns.model.kernel.gamma.detach().item())
 
     try:
-        for bayes_step in tqdm(range(ns.n_iter)):
+        for bayes_step in tqdm(range(args.n_iter)):
             ns.hyperopt(bayes_step)
             ns.bayes_opt.step(bayes_step)
     finally:
-
         best_params = torch.stack(ns.log['best_params'], dim=0)
         overlap = ns.sampler.exact_overlap(best_params.numpy())
 
         logging.info('Bayesian Optimization ended successfully')
         runtime = time.time() - start_time
-
-        if ctx.obj.run is not None:
-            ctx.obj.run.finalize()
 
         state_dict = ns.model.state_dict()
         data_dict = {
@@ -366,8 +290,6 @@ def train(ctx, **kwargs):
 
         if args.reg_term_estimates is not None and args.reg_term_estimates > 0:
             ctx.params['reg_term'] = ns.model.reg
-        if args.acq_params.optim == 'mexicore':
-            data_dict['k_last'] = ns.log['k_last']
 
         with h5py.File(args.output_file, 'w') as fd:
             for key, val in state_dict.items():

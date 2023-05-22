@@ -2,23 +2,18 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="src",
+    name='emicore',
     use_scm_version=True,
-    packages=find_packages(include=['src*']),
+    packages=find_packages(where='src', include=['emicore*']),
+    package_dir={'': 'src'},
     install_requires=[
         'torch>=1.5.0',
         'numpy',
-        'tqdm',
-        'matplotlib',
-        'click',
-        'tensorboard',
-        'joblib',
         'scipy',
-        'noisyopt',
-        'scikit-learn',
-        'qiskit',
+        'qiskit==0.42.1',
+        'click',
         'h5py',
-        'aim'
+        'tqdm',
     ],
     setup_requires=[
         'setuptools_scm',

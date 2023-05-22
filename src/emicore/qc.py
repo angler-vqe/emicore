@@ -1,10 +1,10 @@
-
 from itertools import product
 from functools import reduce
 from operator import add, xor
 from collections import deque
 
 import numpy as np
+from scipy.linalg import eigh
 
 from qiskit import QuantumCircuit, QuantumRegister, Aer, IBMQ, execute
 from qiskit.circuit.library import EfficientSU2
@@ -17,7 +17,24 @@ from qiskit.quantum_info import state_fidelity
 from qiskit.utils import QuantumInstance
 from qiskit.circuit import Parameter
 
-from src.utils import expand_params
+
+def circuit_param_size(circuit, n_layers):
+    if circuit == 'generic':
+        return 2 + n_layers * 4
+    elif circuit == 'esu2':
+        return 2 + n_layers * 2
+    raise RuntimeError(f'No such circuit: \'{circuit}\'')
+
+
+def expand_params(angles, n_qbits):
+    if len(angles.shape) == 1:
+        angles = angles[None]
+    if len(angles.shape) == 2:
+        shape = angles.shape + (n_qbits,)
+        angles = np.repeat(angles, n_qbits, axis=1).reshape(shape)
+    elif len(angles.shape) != 3:
+        raise TypeError('Parameter values have to have 1, 2 or 3 dimensions.')
+    return angles
 
 
 def heisenberg_hamiltonian(n_qbits, j=[1.0, 1.0, 1.0], h=[0.0, 0.0, 1.0], pbc=True):
@@ -354,3 +371,9 @@ def measure_state_vector(
         state_vector = compute_state_vector(qcircuit)
         state_vectors.append(state_vector)
     return np.stack(state_vectors, axis=0)
+
+
+def exact_spectrum(n_qbits, j=[1.0, 1.0, 1.0], h=[0.0, 0.0, 1.0], pbc=True, n_eigvals=2):
+    ham = heisenberg_hamiltonian(n_qbits, j, h, False).to_matrix()
+    w, v = eigh(ham, eigvals=(0, n_eigvals - 1))
+    return w, v

@@ -11,17 +11,9 @@ import torch
 import h5py
 import numpy as np
 from tqdm import tqdm
-try:
-    from aim import Run
-except ModuleNotFoundError:
-    class Run(dict):
-        def __init__(self, *args, **kwargs):
-            raise RuntimeError('Please install aim!')
 
-from src.bayesopt.util import DataSampler
-
-from src.qc.qiskit import measure_overlap, measure_energy
-from src.energy import BACKENDS
+from emicore.util import DataSampler
+from emicore.cli import QCParams
 
 
 def nakanishi_step(x_start, y_start, k_dim, true_energy):
@@ -75,12 +67,6 @@ def main(ctx, seed, aim_repo, json_log):
     ctx.ensure_object(Namespace)
     ctx.obj.rng = np.random.default_rng(seed)
 
-    if aim_repo is not None:
-        ctx.obj.run = Run(experiment='nakanishi', repo=aim_repo)
-        ctx.obj.run['seed'] = seed
-    else:
-        ctx.obj.run = None
-
     if json_log is not None:
         ctx.obj.json_log = json_log
     else:
@@ -89,23 +75,10 @@ def main(ctx, seed, aim_repo, json_log):
 
 @main.command('optimize')
 @click.argument('output_file', type=click.Path(writable=True))
-@click.option('--n-layers', type=int, default=1)
-@click.option('--n-qbits', type=int, default=2)
-@click.option('--sector', type=int, default=1)
-@click.option('--n-readout', type=int, default=0)
-@click.option('--free-angles', 'n_free_angles', type=int, default=None)
-@click.option('--j-coupling', type=float, nargs=3, default=(1.0, 1.0, 1.0), help='Nearest Neigh. interaction coupling')
-@click.option('--h-coupling', type=float, nargs=3, default=(1.0, 1.0, 1.0), help='External magnetic field coupling')
-@click.option('--pbc/--obc', default=True, help='Set Periodic/Open Boundary Conditions PBC or OBC. PBC default')
+@QCParams.options()
 @click.option('--n-iter', type=int, default=10, help='Iteration for Optimization')
 @click.option('--stabilize-interval', type=int, default=0, help='Iteration for Optimization')
-@click.option('--assume-exact/--assume-estimate', default=False, help='Assume energy is exact or an estimate.')
-@click.option('--circuit', 'circuit_name', type=click.Choice(['generic', 'esu2']), default='esu2')
-@click.option('--backend', 'backend_name', type=click.Choice(list(BACKENDS)), default='qiskit')
 @click.option('--random/--sequential', default=False, help='Dimension selection strategy.')
-@click.option('--noise-level', type=float, default=0.0)
-@click.option('--cache', type=click.Path(dir_okay=False), help='Cache for ground state wave function.')
-@click.option('--train-data-mode', type=click.Choice(['cache', 'compute']), default='compute')
 @click.pass_context
 def train(ctx, **kwargs):
     args = Namespace(**kwargs)
@@ -118,12 +91,10 @@ def train(ctx, **kwargs):
         args.j_coupling,
         args.h_coupling,
         n_readout=args.n_readout,
-        n_free_angles=args.n_free_angles,
         sector=args.sector,
         noise_level=args.noise_level,
         rng=ctx.obj.rng,
-        backend=args.backend_name,
-        circuit=args.circuit_name,
+        circuit=args.circuit,
         pbc=args.pbc,
         cache_fname=args.cache
     )
@@ -136,38 +107,15 @@ def train(ctx, **kwargs):
     # computes true wf and true energy for ground and first excited states
     true_e0, true_e1, true_wf = sampler.exact_diag()
 
-    if ctx.obj.run is not None:
-        ctx.obj.run['params'] = ctx.params
-        ctx.obj.run['true_energy'] = {
-            'e0': true_e0.item(),
-            'e1': true_e1.item(),
-        }
-
     def observe_fn(x_start, y_start, step, exact=False):
         nonlocal y_best
 
-        fidelity = measure_overlap(
-            args.n_qbits,
-            args.n_layers,
-            angles=x_start.numpy(),
-            exact_wf=true_wf,
-            mom_sector=args.sector,
-            circuit=args.circuit_name,
-        ).item()
+        fidelity = sampler.exact_overlap(x_start)
 
         if exact:
             y_true = y_start.item()
         else:
-            y_true = measure_energy(
-                args.n_qbits,
-                args.n_layers,
-                args.j_coupling,
-                args.h_coupling,
-                angles=x_start.numpy(),
-                mom_sector=args.sector,
-                pbc=args.pbc,
-                circuit=args.circuit_name,
-            ).item()
+            y_true = sampler.exact_energy(x_start).item()
 
         if y_start < y_best:
             y_best = y_start
@@ -182,10 +130,6 @@ def train(ctx, **kwargs):
 
         if args.stabilize_interval:
             observables['n_qc_eval'] += step // args.stabilize_interval
-
-        if ctx.obj.run is not None:
-            for key, value in observables.items():
-                ctx.obj.run.track(value, name=key, step=step)
 
         if ctx.obj.json_log is not None:
             with open(ctx.obj.json_log, 'a') as fd:
@@ -215,14 +159,7 @@ def train(ctx, **kwargs):
         )
 
     step_params = np.concatenate(step_params, axis=0)
-    overlap = measure_overlap(
-        args.n_qbits,
-        args.n_layers,
-        angles=step_params,
-        exact_wf=true_wf,
-        mom_sector=args.sector,
-        circuit=args.circuit_name,
-    )
+    overlap = sampler.exact_overlap(step_params)
 
     logging.info('Nakanishi optimization ended successfully!')
     runtime = time.time() - start_time

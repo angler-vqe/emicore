@@ -1,6 +1,3 @@
-import hashlib
-import os
-import pickle
 import re
 from collections import namedtuple
 from argparse import Namespace
@@ -8,15 +5,12 @@ from typing import NamedTuple
 from functools import wraps, partial
 
 import click
-import h5py
-import numpy as np
 import torch
 
-from src.energy import BACKENDS
-from src.bayesopt.gp import KERNELS
-from src.bayesopt.bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
-from src.bayesopt.bo import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
-from src.bayesopt.bo import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
+from .gp import KERNELS
+from .bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer
+from .bo import SMOOptimizer, EMICOREOptimizer
+from .bo import ExpectedImprovement, LowerConfidenceBound
 
 
 class FinalProperties:
@@ -73,12 +67,6 @@ def csobj(dtype, sep=',', maxsplit=-1, length=-1):
     return wrapped
 
 
-def option_dict(string):
-    if isinstance(string, dict):
-        return string
-    return dict([elem.split('=', 1) for elem in string.split(',') if elem])
-
-
 def _append_param(func, param):
     if isinstance(func, click.Command):
         func.params.append(param)
@@ -98,55 +86,6 @@ def namedtuple_as_dict(input):
     if isinstance(input, (tuple, list)):
         return type(input)(namedtuple_as_dict(value) for value in input)
     return input
-
-
-def arrhash(*args):
-    hasher = hashlib.sha256()
-    for arg in args:
-        if isinstance(arg, (np.ndarray, torch.Tensor)):
-            arr = np.array(arg)
-            flag = arr.flags.writeable
-            arr.flags.writeable = False
-            hasher.update(arr.data)
-            arr.flags.writeable = flag
-        else:
-            hasher.update(pickle.dumps(arg))
-    return hasher.hexdigest()
-
-
-def arrcache(fname, func, identifiers, keys='value'):
-    if fname is None:
-        return func()
-    single = isinstance(keys, str)
-    if single:
-        keys = (keys,)
-
-    identifier = arrhash(*identifiers)
-    results = None
-
-    if os.path.exists(fname):
-        with h5py.File(fname, 'r') as fd:
-            if identifier in fd:
-                results = tuple(
-                    torch.from_numpy(dset[()]) if dset.attrs.get('type', 'numpy') == 'torch' else dset[()]
-                    for dset in (fd[f'{identifier}/{key}'] for key in keys)
-                )
-
-    if results is None:
-        results = func()
-        if single:
-            results = (results,)
-        try:
-            with h5py.File(fname, 'a') as fd:
-                for key, result in zip(keys, results):
-                    fd[f'{identifier}/{key}'] = result
-                    fd[f'{identifier}/{key}'].attrs['type'] = 'torch' if isinstance(result, torch.Tensor) else 'numpy'
-        except OSError as error:
-            raise RuntimeError(f'Unable to cache key \'{identifier}\'.') from error
-
-    if single:
-        results, = results
-    return results
 
 
 class Data(NamedTuple):
@@ -306,8 +245,6 @@ OPTIMIZER_SETUPS = {
     'oneshot': (OneShotOptimizer, ()),
     'gd': (GradientDescentOptimizer, ('lr', 'n_iter')),
     'lbfgs': (LBFGSOptimizer, ('max_iter', 'max_eval', 'max_ls', 'gtol')),
-    'tlbfgs': (TorchLBFGSOptimizer, ('lr', 'max_iter')),
-    'mexicore': (EILVSOptimizer, ('gridsize', 'weighted', 'stabilize_interval', 'seq_reg', 'seq_reg_init')),
     'smo': (SMOOptimizer, ('stabilize_interval',)),
     'emicore': (EMICOREOptimizer, (
         'stabilize_interval',
@@ -325,24 +262,20 @@ OPTIMIZER_SETUPS = {
 
 ACQUISITION_FNS = {
     'lcb': (LowerConfidenceBound, {'beta': 0.1}),
-    'alcb': (AdaptiveLCB, {'d': None}),
     'ei': (ExpectedImprovement, {}),
-    'wei': (WeightedExpectedImprovement, {}),
 }
 
 
 class QCParams(OptionParams):
     n_layers: int = 1, 'Number of circuit layers'
     n_qbits: int = 2, 'Number of QBits'
-    sector: int = -1, 'Sector -1 or 1'
+    sector: int = 1, 'Sector -1 or 1'
     n_readout: int = 0, 'Number of shots'
     j_coupling: csobj(float, length=3) = '1,1,1', 'Nearest Neigh. interaction coupling'
     h_coupling: csobj(float, length=3) = '1,1,1', 'External magnetic field coupling'
     pbc: click.BOOL = True, 'Set Periodic/Open Boundary Conditions PBC or OBC. PBC default'
     circuit: click.Choice(['generic', 'esu2']) = 'generic', 'Circuit name'  # noqa: F821
-    backend: click.Choice(list(BACKENDS)) = 'quest', 'Backend for QC'
     noise_level: float = 0.0, 'Circuit noise level'
-    free_angles: int = None, 'number of free angles'
     assume_exact: click.BOOL = False, 'Assume energy is exact or an estimate.'
     cache: click.Path(dir_okay=False) = None, 'Cache for ground state wave function and initial train data.'
     train_data_mode: click.Choice(('cache', 'compute')) = 'compute', 'Inital data mode'  # noqa: F821
@@ -355,30 +288,26 @@ class KernelParams(OptionParams):
 
 class GPParams(OptionParams):
     kernel: click.Choice(list(KERNELS)) = 'vqe', 'Name of the kernel'
-    reg_term: float = 1e-10, 'Observation noise'
-    reg_term_estimates: int = None, 'Number of estimates for reg_term'
+    reg_term: PositiveFloat = 1e-10, 'Observation noise'
+    reg_term_estimates: int = 16, 'Number of estimates for reg_term'
     kernel_params: KernelParams() = '', 'Kernel options'
     prior_mean: click.BOOL = False, 'Setting non zero mean if True'
 
 
 class AcqParams(OptionParams):
-    func: click.Choice(['lcb', 'ei', 'alcb', 'wei']) = 'lcb', ''  # noqa: F821
+    func: click.Choice(list(ACQUISITION_FNS)) = 'ei', ''  # noqa: F821
     optim: click.Choice(list(OPTIMIZER_SETUPS)) = 'oneshot', ''
-    lr: float = 1., ''
+    lr: PositiveFloat = 1., ''
     n_iter: int = None, ''
-    max_iter: int = 200, ''
-    max_eval: int = None, ''
+    max_iter: int = 15000, ''
+    max_eval: int = 15000, ''
     max_ls: int = None, ''
-    gtol: float = None, ''
-    gridsize: int = None, ''
-    weighted: click.BOOL = None, ''
+    gtol: PositiveFloat = 1e-70, ''
     stabilize_interval: int = None, ''
-    seq_reg: float = 0.0, ''
-    seq_reg_init: int = -20, ''
     pairsize: int = 20, ''
     gridsize: int = 100, ''
     samplesize: int = 100, ''
-    corethresh: float = 1.0, ''
+    corethresh: PositiveFloat = 1.0, ''
     corethresh_width: int = 10, ''
     core_trials: int = 10, ''
     smo_steps: int = 100, ''
@@ -386,21 +315,19 @@ class AcqParams(OptionParams):
 
 
 class HyperParams(OptionParams):
-    optim: click.Choice(['adam', 'grid', 'none']) = 'grid', ''  # noqa: F821
+    optim: click.Choice(['grid', 'none']) = 'grid', ''  # noqa: F821
     loss: click.Choice(['mll', 'loo']) = 'loo', ''  # noqa: F821
-    lr: float = 1e-4, ''
-    threshold: float = 0.0, ''
+    lr: PositiveFloat = 1e-4, ''
+    threshold: PositiveFloat = 0.0, ''
     steps: int = 200, ''
     interval: str = '', ''
-    max_gamma: float = 10.0, ''
+    max_gamma: PositiveFloat = 10.0, ''
 
 
 class BOParams(OptionParams):
-    train_samples: int = 5000, ''
+    train_samples: int = 1, ''
     candidate_samples: int = 500, ''
     candidate_shots: int = 10, ''
     n_iter: int = 50, 'Iteration for Bayesian Optimization'
     acq_params: AcqParams() = '', ''
     hyperopt: HyperParams() = '', ''
-    stabilize_interval: int = 0, 'Iteration for Optimization'
-    iter_mode: click.Choice(['step', 'qc']) = 'step', ''  # noqa: F821
