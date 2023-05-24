@@ -14,7 +14,6 @@ setup(
         'click',
         'h5py',
         'tqdm',
-        'matplotlib',
     ],
     setup_requires=[
         'setuptools_scm',
