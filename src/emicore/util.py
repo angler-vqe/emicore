@@ -141,7 +141,7 @@ class DataSampler:
         circuit='generic',
         cache_fname='',
     ):
-        self.n_circuit_params = circuit_param_size(circuit, n_layers)
+        self.param_shape = (n_qbits, n_layers)
         if rng is None:
             rng = np.random.default_rng()
         self.rng = rng
@@ -189,7 +189,7 @@ class DataSampler:
         if isinstance(angles, np.ndarray):
             angles = torch.from_numpy(angles)
         return torch.tensor(
-            self.energy_fn(angles)
+            self.energy_fn(angles.numpy())
         ).to(angles)
 
     def true_energy_variance(self, angles):
@@ -199,7 +199,7 @@ class DataSampler:
 
     def sample(self, n_samples=1000, known=True):
         # expand and fill in template
-        x_data = self.rng.uniform(0, 2 * math.pi, (n_samples, self.n_circuit_params))
+        x_data = self.rng.uniform(0, 2 * math.pi, (n_samples, *self.param_shape))
 
         retval = torch.from_numpy(x_data)
         # compute true values if known

@@ -13,7 +13,7 @@ import numpy as np
 from tqdm import tqdm
 
 from emicore.util import DataSampler
-from emicore.qc import measure_overlap, measure_energy
+from emicore.cli import QCParams
 
 
 def nakanishi_step(x_start, y_start, k_dim, true_energy):
@@ -75,21 +75,10 @@ def main(ctx, seed, aim_repo, json_log):
 
 @main.command('optimize')
 @click.argument('output_file', type=click.Path(writable=True))
-@click.option('--n-layers', type=int, default=1)
-@click.option('--n-qbits', type=int, default=2)
-@click.option('--sector', type=int, default=1)
-@click.option('--n-readout', type=int, default=0)
-@click.option('--j-coupling', type=float, nargs=3, default=(1.0, 1.0, 1.0), help='Nearest Neigh. interaction coupling')
-@click.option('--h-coupling', type=float, nargs=3, default=(1.0, 1.0, 1.0), help='External magnetic field coupling')
-@click.option('--pbc/--obc', default=True, help='Set Periodic/Open Boundary Conditions PBC or OBC. PBC default')
+@QCParams.options()
 @click.option('--n-iter', type=int, default=10, help='Iteration for Optimization')
 @click.option('--stabilize-interval', type=int, default=0, help='Iteration for Optimization')
-@click.option('--assume-exact/--assume-estimate', default=False, help='Assume energy is exact or an estimate.')
-@click.option('--circuit', 'circuit_name', type=click.Choice(['generic', 'esu2']), default='esu2')
 @click.option('--random/--sequential', default=False, help='Dimension selection strategy.')
-@click.option('--noise-level', type=float, default=0.0)
-@click.option('--cache', type=click.Path(dir_okay=False), help='Cache for ground state wave function.')
-@click.option('--train-data-mode', type=click.Choice(['cache', 'compute']), default='compute')
 @click.pass_context
 def train(ctx, **kwargs):
     args = Namespace(**kwargs)
@@ -105,7 +94,7 @@ def train(ctx, **kwargs):
         sector=args.sector,
         noise_level=args.noise_level,
         rng=ctx.obj.rng,
-        circuit=args.circuit_name,
+        circuit=args.circuit,
         pbc=args.pbc,
         cache_fname=args.cache
     )
@@ -121,28 +110,12 @@ def train(ctx, **kwargs):
     def observe_fn(x_start, y_start, step, exact=False):
         nonlocal y_best
 
-        fidelity = measure_overlap(
-            args.n_qbits,
-            args.n_layers,
-            angles=x_start.numpy(),
-            exact_wf=true_wf,
-            mom_sector=args.sector,
-            circuit=args.circuit_name,
-        ).item()
+        fidelity = sampler.exact_overlap(x_start)
 
         if exact:
             y_true = y_start.item()
         else:
-            y_true = measure_energy(
-                args.n_qbits,
-                args.n_layers,
-                args.j_coupling,
-                args.h_coupling,
-                angles=x_start.numpy(),
-                mom_sector=args.sector,
-                pbc=args.pbc,
-                circuit=args.circuit_name,
-            ).item()
+            y_true = sampler.exact_energy(x_start).item()
 
         if y_start < y_best:
             y_best = y_start
@@ -186,14 +159,7 @@ def train(ctx, **kwargs):
         )
 
     step_params = np.concatenate(step_params, axis=0)
-    overlap = measure_overlap(
-        args.n_qbits,
-        args.n_layers,
-        angles=step_params,
-        exact_wf=true_wf,
-        mom_sector=args.sector,
-        circuit=args.circuit_name,
-    )
+    overlap = sampler.exact_overlap(step_params)
 
     logging.info('Nakanishi optimization ended successfully!')
     runtime = time.time() - start_time

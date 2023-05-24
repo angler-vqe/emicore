@@ -263,7 +263,7 @@ def train(ctx, **kwargs):
     ns.log['gamma_history'].append(ns.model.kernel.gamma.detach().item())
 
     try:
-        for bayes_step in tqdm(range(ns.n_iter)):
+        for bayes_step in tqdm(range(args.n_iter)):
             ns.hyperopt(bayes_step)
             ns.bayes_opt.step(bayes_step)
     finally:

@@ -275,7 +275,7 @@ class QCParams(OptionParams):
     h_coupling: csobj(float, length=3) = '1,1,1', 'External magnetic field coupling'
     pbc: click.BOOL = True, 'Set Periodic/Open Boundary Conditions PBC or OBC. PBC default'
     circuit: click.Choice(['generic', 'esu2']) = 'generic', 'Circuit name'  # noqa: F821
-    noise_level: PositiveFloat = 0.0, 'Circuit noise level'
+    noise_level: float = 0.0, 'Circuit noise level'
     assume_exact: click.BOOL = False, 'Assume energy is exact or an estimate.'
     cache: click.Path(dir_okay=False) = None, 'Cache for ground state wave function and initial train data.'
     train_data_mode: click.Choice(('cache', 'compute')) = 'compute', 'Inital data mode'  # noqa: F821
