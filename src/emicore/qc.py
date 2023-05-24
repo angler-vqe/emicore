@@ -1,10 +1,10 @@
-
 from itertools import product
 from functools import reduce
 from operator import add, xor
 from collections import deque
 
 import numpy as np
+from scipy.linalg import eigh
 
 from qiskit import QuantumCircuit, QuantumRegister, Aer, IBMQ, execute
 from qiskit.circuit.library import EfficientSU2
@@ -17,7 +17,7 @@ from qiskit.quantum_info import state_fidelity
 from qiskit.utils import QuantumInstance
 from qiskit.circuit import Parameter
 
-from src.emicore.utils import expand_params
+from .utils import expand_params
 
 
 def heisenberg_hamiltonian(n_qbits, j=[1.0, 1.0, 1.0], h=[0.0, 0.0, 1.0], pbc=True):

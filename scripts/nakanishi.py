@@ -11,17 +11,9 @@ import torch
 import h5py
 import numpy as np
 from tqdm import tqdm
-try:
-    from aim import Run
-except ModuleNotFoundError:
-    class Run(dict):
-        def __init__(self, *args, **kwargs):
-            raise RuntimeError('Please install aim!')
 
-from src.emicore.bayesopt.util import DataSampler
-
-from src.emicore.qc.qiskit import measure_overlap, measure_energy
-from src.emicore.energy import BACKENDS
+from emicore.bayesopt.util import DataSampler
+from emicore.qc import measure_overlap, measure_energy
 
 
 def nakanishi_step(x_start, y_start, k_dim, true_energy):
@@ -75,12 +67,6 @@ def main(ctx, seed, aim_repo, json_log):
     ctx.ensure_object(Namespace)
     ctx.obj.rng = np.random.default_rng(seed)
 
-    if aim_repo is not None:
-        ctx.obj.run = Run(experiment='nakanishi', repo=aim_repo)
-        ctx.obj.run['seed'] = seed
-    else:
-        ctx.obj.run = None
-
     if json_log is not None:
         ctx.obj.json_log = json_log
     else:
@@ -101,7 +87,6 @@ def main(ctx, seed, aim_repo, json_log):
 @click.option('--stabilize-interval', type=int, default=0, help='Iteration for Optimization')
 @click.option('--assume-exact/--assume-estimate', default=False, help='Assume energy is exact or an estimate.')
 @click.option('--circuit', 'circuit_name', type=click.Choice(['generic', 'esu2']), default='esu2')
-@click.option('--backend', 'backend_name', type=click.Choice(list(BACKENDS)), default='qiskit')
 @click.option('--random/--sequential', default=False, help='Dimension selection strategy.')
 @click.option('--noise-level', type=float, default=0.0)
 @click.option('--cache', type=click.Path(dir_okay=False), help='Cache for ground state wave function.')
@@ -122,7 +107,6 @@ def train(ctx, **kwargs):
         sector=args.sector,
         noise_level=args.noise_level,
         rng=ctx.obj.rng,
-        backend=args.backend_name,
         circuit=args.circuit_name,
         pbc=args.pbc,
         cache_fname=args.cache
@@ -135,13 +119,6 @@ def train(ctx, **kwargs):
 
     # computes true wf and true energy for ground and first excited states
     true_e0, true_e1, true_wf = sampler.exact_diag()
-
-    if ctx.obj.run is not None:
-        ctx.obj.run['params'] = ctx.params
-        ctx.obj.run['true_energy'] = {
-            'e0': true_e0.item(),
-            'e1': true_e1.item(),
-        }
 
     def observe_fn(x_start, y_start, step, exact=False):
         nonlocal y_best
@@ -182,10 +159,6 @@ def train(ctx, **kwargs):
 
         if args.stabilize_interval:
             observables['n_qc_eval'] += step // args.stabilize_interval
-
-        if ctx.obj.run is not None:
-            for key, value in observables.items():
-                ctx.obj.run.track(value, name=key, step=step)
 
         if ctx.obj.json_log is not None:
             with open(ctx.obj.json_log, 'a') as fd:

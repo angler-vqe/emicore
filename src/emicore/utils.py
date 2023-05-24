@@ -8,15 +8,6 @@ class SingularGramError(RuntimeError):
     pass
 
 
-def append_train_log(fpath, stats):
-    with open(fpath, 'a') as fd:
-        # write the header if we are at byte 0 of the file
-        if not fd.tell():
-            fd.write(','.join(str(key) for key in stats) + '\n')
-        # write the supplied payload line
-        fd.write(','.join(str(value) for value in stats.values()) + '\n')
-
-
 def circuit_param_size(circuit, n_layers):
     if circuit == 'generic':
         return 2 + n_layers * 4
@@ -34,10 +25,6 @@ def expand_params(angles, n_qbits):
     elif len(angles.shape) != 3:
         raise TypeError('Parameter values have to have 1, 2 or 3 dimensions.')
     return angles
-
-
-def state_fidelity(wf1, wf2):
-    return np.absolute(np.dot(np.conj(np.transpose(wf1)), wf2))
 
 
 def grid_search_gamma(model, min_gamma=1.0, max_gamma=30.0, num=20, skip_middle=True, loss='loo'):

@@ -12,13 +12,14 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-from src.emicore.bayesopt.bo import BayesianOptimization
-from src.emicore.bayesopt.gp import GaussianProcess, KERNELS
-from src.emicore.bayesopt.util import DataSampler
+from emicore.bayesopt.bo import BayesianOptimization
+from emicore.bayesopt.gp import GaussianProcess, KERNELS
+from emicore.bayesopt.util import DataSampler
 
-from src.emicore.utils import grid_search_gamma, interval_schedule
-from src.emicore.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
-from src.emicore.cli import namedtuple_as_dict, final_property
+from emicore.utils import grid_search_gamma, interval_schedule
+from emicore.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
+from emicore.cli import namedtuple_as_dict, final_property
+
 
 @click.group()
 @click.option('--seed', type=int, default=0xDEADBEEF)
@@ -34,8 +35,6 @@ def main(ctx, seed, json_log):
 
     ctx.ensure_object(Namespace)
     ctx.obj.rng = np.random.default_rng(seed)
-
-    ctx.obj.run = None
 
     if json_log is not None:
         ctx.obj.json_log = json_log
@@ -75,7 +74,6 @@ class BayesOptCLI:
             n_readout=self.args.n_readout,
             n_free_angles=self.args.free_angles,
             sector=self.args.sector,
-            backend=self.args.backend,
             circuit=self.args.circuit,
             noise_level=self.args.noise_level,
             pbc=self.args.pbc,
@@ -192,16 +190,6 @@ class BayesOptCLI:
             if 'x_start' in state and 'k_best' in state:
                 observables['k_last'] = int(np.ravel_multi_index(state['k_best'], state['x_start'].shape))
 
-            if self.ctx.obj.run is not None:
-                if 'acq_dir_perc' in state:
-                    # aim_observables['acq_dir_perc'] = PercentileDist(state['acq_dir_perc'])
-                    for n, value in enumerate(np.percentile(state['acq_dir_perc'], np.linspace(0., 100., 11))):
-                        self.ctx.obj.run.track(
-                            value, name='acq_dir_perc', step=state['step'], context={'percentile': n * 10}
-                        )
-                for key, value in observables.items():
-                    self.ctx.obj.run.track(value, name=key, step=state['step'])
-
             if self.ctx.obj.json_log is not None:
                 with open(self.ctx.obj.json_log, 'a') as fd:
                     json.dump(observables, fd)
@@ -305,13 +293,6 @@ def train(ctx, **kwargs):
     ns = BayesOptCLI(args, ctx)
     start_time = time.time()
 
-    if ctx.obj.run is not None:
-        ctx.obj.run['params'] = ctx.params
-        ctx.obj.run['true_energy'] = {
-            'e0': ns.true_solution.e0.item(),
-            'e1': ns.true_solution.e1.item(),
-        }
-
     ns.log['gamma_history'].append(ns.model.kernel.gamma.detach().item())
 
     try:
@@ -325,9 +306,6 @@ def train(ctx, **kwargs):
 
         logging.info('Bayesian Optimization ended successfully')
         runtime = time.time() - start_time
-
-        if ctx.obj.run is not None:
-            ctx.obj.run.finalize()
 
         state_dict = ns.model.state_dict()
         data_dict = {

@@ -3,8 +3,7 @@ from functools import partial
 
 import torch
 import numpy as np
-from ..qc.qiskit import measure_energy_variance, measure_overlap, measure_energy, exact_spectrum
-from ..energy import BACKENDS
+from ..qc import measure_energy, measure_energy_variance, measure_overlap, exact_spectrum
 from ..utils import circuit_param_size
 from ..cli import arrcache
 
@@ -20,12 +19,9 @@ class DataSampler:
         rng=None,
         sector=-1,
         noise_level=0.,
-        prob_1to0=0.,
-        prob_0to1=0.,
         n_readout=0,
         pbc=True,
         circuit='generic',
-        backend='quest',
         cache_fname='',
     ):
         n_circuit_params = circuit_param_size(circuit, n_layers)
@@ -45,14 +41,22 @@ class DataSampler:
             'circuit': circuit,
             'mom_sector': sector,
             'noise_level': noise_level,
-            'prob_1to0': prob_1to0,
-            'prob_0to1': prob_0to1,
             'n_readout': n_readout,
             'pbc': pbc
         }
-        self.backend = backend
 
-        self.energy_fn = BACKENDS[backend](**self.kwargs)
+        self.energy_fn = partial(
+            measure_energy,
+            n_qbits,
+            n_layers,
+            j,
+            h,
+            mom_sector=self.kwargs['mom_sector'],
+            n_readout=self.kwargs['n_readout'],
+            pbc=self.kwargs['pbc'],
+            circuit=self.kwargs['circuit'],
+            noise_level=self.kwargs['noise_level']
+        )
         self.energy_var_fn = partial(
             measure_energy_variance,
             n_qbits,
@@ -71,7 +75,9 @@ class DataSampler:
     def true_energy(self, angles):
         if isinstance(angles, np.ndarray):
             angles = torch.from_numpy(angles)
-        return self.energy_fn(angles)
+        return torch.tensor(
+            self.energy_fn(angles)
+        ).to(angles)
 
     def true_energy_variance(self, angles):
         if isinstance(angles, np.ndarray):
@@ -160,7 +166,6 @@ class DataSampler:
             int(self.kwargs['n_readout']),
             int(self.n_free_angles),
             int(self.kwargs['mom_sector']),
-            str(self.backend),
             str(self.kwargs['circuit']),
             float(self.kwargs['noise_level']),
             bool(self.kwargs['pbc']),

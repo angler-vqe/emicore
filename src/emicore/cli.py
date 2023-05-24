@@ -12,11 +12,10 @@ import h5py
 import numpy as np
 import torch
 
-from src.emicore.energy import BACKENDS
-from src.emicore.bayesopt.gp import KERNELS
-from src.emicore.bayesopt.bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
-from src.emicore.bayesopt.bo import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
-from src.emicore.bayesopt.bo import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
+from .bayesopt.gp import KERNELS
+from .bayesopt.bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
+from .bayesopt.bo import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
+from .bayesopt.bo import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
 
 
 class FinalProperties:
@@ -340,7 +339,6 @@ class QCParams(OptionParams):
     h_coupling: csobj(float, length=3) = '1,1,1', 'External magnetic field coupling'
     pbc: click.BOOL = True, 'Set Periodic/Open Boundary Conditions PBC or OBC. PBC default'
     circuit: click.Choice(['generic', 'esu2']) = 'generic', 'Circuit name'  # noqa: F821
-    backend: click.Choice(list(BACKENDS)) = 'quest', 'Backend for QC'
     noise_level: float = 0.0, 'Circuit noise level'
     free_angles: int = None, 'number of free angles'
     assume_exact: click.BOOL = False, 'Assume energy is exact or an estimate.'
