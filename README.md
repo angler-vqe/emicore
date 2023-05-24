@@ -1,5 +1,4 @@
 # EMICoRe: Expected Maximum Improvement over Confident Regions
-![Angler logo](doc/img/angler.png)
 
 ## Suggested Installation
 
@@ -7,7 +6,7 @@ Clone the repository (or extract from the supplement):
 ```bash
 $ git clone <repository_URL> emicore
 ```
-Move into the new repository and create a new environment:
+Move into the repository's directory and create a new python environment:
 ```bash
 $ cd emicore
 $ python -m venv .venv
