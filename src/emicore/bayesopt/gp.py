@@ -4,7 +4,6 @@ from functools import wraps
 
 import numpy as np
 import torch
-from sklearn.model_selection import LeaveOneOut
 
 from src.emicore.utils import SingularGramError
 
@@ -28,28 +27,6 @@ def atomize(obj):
 
 def cdiff(x1, x2):
     return x1[..., :, None, :] - x2[..., None, :, :]
-
-
-def tdiff(x1, x2, p=2*math.pi, lscale=1):
-    ''' Function to compute torus distance
-
-    Parameters
-    ----------
-    x1 : obj:`numpy.ndarray`
-        First set of points with shape (number of samples x dimensions).
-    x2 : obj:`numpy.ndarray`
-        Second set of points with shape (number of samples x dimensions).
-    p : obj:`float`
-        Periodicity of the manifold (torus).
-    lscale : obj:`float`
-        Lenghtscale parameter.
-    Returns
-    -------
-    obj:`torch.tensor`
-        Torus distance for all points in the 2 sets.
-    '''
-    torus_dist = (p / math.pi / lscale * torch.sin(math.pi / p * cdiff(x1, x2))) ** 2
-    return torus_dist.sum(dim=-1) ** .5
 
 
 class MultivariateNormal:
@@ -244,7 +221,7 @@ class Kernel:
 
 
 @register_kernel('vqe')
-class ShinKernel(Kernel):
+class VQEKernel(Kernel):
     __kernel_params__ = ('gamma',)
 
     def __init__(self, sigma_0=1.0, gamma=1.0, n_feature_dim=2):
@@ -257,32 +234,6 @@ class ShinKernel(Kernel):
     def __call__(self, x1, x2):
         gram_matrix = (self.gamma ** 2 + torch.cos(cdiff(x1, x2))).log() - (1 + self.gamma ** 2).log()
         kern = self.sigma_0_sq * gram_matrix.sum(axis=-1).exp()
-        return kern
-
-    def diag(self, x1):
-        return torch.full(x1.shape[:-self.n_feature_dim], self.sigma_0_sq, dtype=x1.dtype)
-
-
-@register_kernel('sharedvqe')
-class SharedShinKernel(Kernel):
-    __kernel_params__ = ('gamma', 'eta')
-
-    def __init__(self, sigma_0=1.0, gamma=1.0, eta=1.0, share=1, n_feature_dim=2):
-        super().__init__(n_feature_dim=n_feature_dim)
-        self.sigma_0 = sigma_0
-        self.gamma = torch.tensor(gamma)
-        self.sigma_0_sq = sigma_0 ** 2
-        self.eta = torch.tensor(eta)
-        self.share = share
-
-    @flatargs
-    def __call__(self, x1, x2):
-        s = torch.arange(1, self.share + 1)[..., :, None, None, None]
-        numerator = self.gamma ** 2 + (self.eta ** (2 * s) * torch.cos(s * cdiff(x1, x2)[..., None, :, :, :])).sum(-3)
-        denominator = self.gamma ** 2 + (self.eta ** (2 * s)).sum(-3)
-
-        gram_matrix = numerator / denominator
-        kern = self.sigma_0_sq * gram_matrix.prod(axis=-1)
         return kern
 
     def diag(self, x1):
@@ -327,65 +278,6 @@ class PeriodicKernel(Kernel):
 
     def diag(self, x1):
         return torch.full(x1.shape[:-self.n_feature_dim], self.sigma_0_sq, dtype=x1.dtype)
-
-
-@register_kernel('matern')
-class MaternKernel(Kernel):
-    __kernel_params__ = ('nu',)
-
-    def __init__(self, nu=2.5, n_feature_dim=2):
-        super().__init__(n_feature_dim=n_feature_dim)
-        if nu not in {0.5, 1.5, 2.5}:
-            raise ValueError('Only values 0.5, 1.5 and 2.5 are allowed for nu.')
-        self.nu = nu
-
-    @flatargs
-    def __call__(self, x1, x2):
-        dists = torch.cdist(x1, x2)
-        if self.nu == 0.5:
-            kern = torch.exp(-dists)
-        elif self.nu == 1.5:
-            kern = dists * math.sqrt(3)
-            kern = (1. + kern) * torch.exp(-kern)
-        elif self.nu == 2.5:
-            kern = dists * math.sqrt(5)
-            kern = (1. + kern + kern ** 2 / 3.0) * torch.exp(-kern)
-        else:
-            raise ValueError('Only values 0.5, 1.5 and 2.5 are allowed for nu.')
-
-        return kern
-
-    def diag(self, x1):
-        return torch.full(x1.shape[:-self.n_feature_dim], self.sigma_0, dtype=x1.dtype)
-
-
-@register_kernel('torusrbf')
-class TorusRBFKernel(RBFKernel):
-    @flatargs
-    def __call__(self, x1, x2):
-        exp_term = (tdiff(x1, x2) / self.gamma) ** 2
-        kern = self.sigma_0 * torch.exp(-0.5 * exp_term)
-        return kern
-
-
-@register_kernel('torusmatern')
-class TorusMaternKernel(MaternKernel):
-
-    @flatargs
-    def __call__(self, x1, x2):
-        dists = tdiff(x1, x2)
-        if self.nu == 0.5:
-            kern = torch.exp(-dists)
-        elif self.nu == 1.5:
-            kern = dists * math.sqrt(3)
-            kern = (1. + kern) * torch.exp(-kern)
-        elif self.nu == 2.5:
-            kern = dists * math.sqrt(5)
-            kern = (1. + kern + kern ** 2 / 3.0) * torch.exp(-kern)
-        else:
-            raise ValueError('Only values 0.5, 1.5 and 2.5 are allowed for nu.')
-
-        return kern
 
 
 class GaussianProcess:
@@ -473,7 +365,6 @@ class GaussianProcess:
         self._mean = mean[-1] if isinstance(mean, (torch.Tensor, np.ndarray)) else float(mean)
         self.mean = torch.full((len(x_train),), self._mean, dtype=x_train.dtype) if isinstance(mean, float) else mean
         self.covar = kernel(x_train, x_train)
-        # self.covar.diagonal()[()] += reg
         self.covar = self.covar + torch.diag_embed(torch.tensor((self.reg,) * len(self.covar)))
         self.cholesky = torch.linalg.cholesky(self.covar, upper=False)
         self.cov_inv_y = torch.cholesky_solve(self.y_train[:, None], self.cholesky, upper=False)
@@ -626,7 +517,6 @@ class GaussianProcess:
         dnew = len(x_cand)
         kernel_both = self.kernel(self.x_train, x_cand)
         kernel_cand = self.kernel(x_cand, x_cand)
-        # kernel_cand.diagonal()[()] += self.reg
         kernel_cand = kernel_cand + torch.diag_embed(torch.tensor((self.reg,) * dnew))
 
         covar = torch.empty((dim + dnew,) * 2, dtype=self.covar.dtype)
@@ -657,58 +547,6 @@ class GaussianProcess:
         self.cholesky = chol
         self.cov_inv_y = cov_inv_y
 
-    def replace_last(self, x_cand, y_cand=None, dirty=False):
-        """Replace the most recent training points with new candidate point(s).
-
-        Parameters
-        ----------
-        x_cand : obj:`numpy.ndarray`
-            New (batch of) candidate points to be replaced.
-        y_cand : obj:`numpy.ndarray`, optional
-            Function values of candidate points to be replaced.
-        """
-        dnew = len(x_cand)
-        dim = len(self.covar) - dnew
-
-        kernel_both = self.kernel(self.x_train[:dim], x_cand)
-        kernel_cand = self.kernel(x_cand, x_cand)
-        kernel_cand = kernel_cand + torch.diag_embed(torch.tensor((self.reg,) * dnew))
-
-        self.covar[:dim, dim:] = kernel_both
-        self.covar[dim:, :dim] = kernel_both.t()
-        self.covar[dim:, dim:] = kernel_cand
-
-        L21 = torch.linalg.solve_triangular(self.cholesky, kernel_both, upper=False).t()
-        pred_cov = kernel_cand - L21 @ L21.t()
-        if (torch.linalg.matrix_rank(pred_cov, atol=1e-10) < pred_cov.shape[-1]).any():
-            raise SingularGramError('Updated Gram matrix is singular!')
-        try:
-            L22 = torch.linalg.cholesky(pred_cov, upper=False)
-        except RuntimeError as error:
-            raise SingularGramError('Updated Gram matrix is singular!') from error
-
-        self.cholesky[:dim, dim:] = 0.
-        self.cholesky[dim:, :dim] = L21
-        self.cholesky[dim:, dim:] = L22
-
-        if y_cand is not None:
-            self.y_train[dim:] = y_cand
-
-        if not dirty:
-            cov_inv_y = torch.cholesky_solve(self.y_train[:, None], self.cholesky, upper=False)
-            self.cov_inv_y = cov_inv_y
-
-        self.x_train[dim:] = x_cand
-
-    def remove_last(self, size):
-        """Remove the most recent training points."""
-        self.x_train = self.x_train[:-size]
-        self.y_train = self.y_train[:-size]
-        self.mean = self.mean[:-size]
-        self.covar = self.covar[:-size, :-size]
-        self.cholesky = self.cholesky[:-size, :-size]
-        self.cov_inv_y = torch.cholesky_solve(self.y_train[:, None], self.cholesky, upper=False)
-
     def reinit(self):
         self.initialize(self.x_train, self.y_train, self.kernel, reg=self.reg, mean=self.mean)
 
@@ -727,25 +565,7 @@ class GaussianProcess:
         kernel_inv_diag = torch.diag(torch.cholesky_inverse(self.cholesky, upper=False))
         loo_mu = self.y_train - self.cov_inv_y.squeeze(1) / kernel_inv_diag
         loo_var = 1 / kernel_inv_diag
-        # log2pi = 1.8378770664093453
         return (-0.5 * (loo_var.log() + (self.y_train - loo_mu) ** 2 / loo_var)).sum()
-
-    def loocv_mll(self):
-        loo = LeaveOneOut()
-        result = 0
-        loo.get_n_splits(self.x_train)
-
-        for train_index, val_index in loo.split(self.x_train):
-            x_train, x_val = self.x_train[train_index], self.x_train[val_index]
-            y_train, y_val = self.y_train[train_index], self.y_train[val_index]
-            sigma = torch.diag_embed(torch.tensor((self.reg,) * len(x_train)))
-            kernel_inv = torch.linalg.inv(self.kernel(x_train, x_train) + sigma)
-            kernel_inv_y = torch.matmul(kernel_inv, y_train)
-            test_kernel = self.kernel(x_train, x_val)
-            pred = torch.dot(test_kernel.squeeze(1), kernel_inv_y)
-
-            result += ((y_val - pred) ** 2).sum()
-        return result
 
     def cholesky_append(self, kernel_peek, peek_covar):
         L21 = torch.linalg.solve_triangular(self.cholesky, kernel_peek, upper=False).transpose(-2, -1)

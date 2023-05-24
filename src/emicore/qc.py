@@ -354,3 +354,9 @@ def measure_state_vector(
         state_vector = compute_state_vector(qcircuit)
         state_vectors.append(state_vector)
     return np.stack(state_vectors, axis=0)
+
+
+def exact_spectrum(n_qbits, j=[1.0, 1.0, 1.0], h=[0.0, 0.0, 1.0], pbc=True, n_eigvals=2):
+    ham = heisenberg_hamiltonian(n_qbits, j, h, False).to_matrix()
+    w, v = eigh(ham, eigvals=(0, n_eigvals - 1))
+    return w, v
