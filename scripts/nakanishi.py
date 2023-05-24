@@ -79,7 +79,6 @@ def main(ctx, seed, aim_repo, json_log):
 @click.option('--n-qbits', type=int, default=2)
 @click.option('--sector', type=int, default=1)
 @click.option('--n-readout', type=int, default=0)
-@click.option('--free-angles', 'n_free_angles', type=int, default=None)
 @click.option('--j-coupling', type=float, nargs=3, default=(1.0, 1.0, 1.0), help='Nearest Neigh. interaction coupling')
 @click.option('--h-coupling', type=float, nargs=3, default=(1.0, 1.0, 1.0), help='External magnetic field coupling')
 @click.option('--pbc/--obc', default=True, help='Set Periodic/Open Boundary Conditions PBC or OBC. PBC default')
@@ -103,7 +102,6 @@ def train(ctx, **kwargs):
         args.j_coupling,
         args.h_coupling,
         n_readout=args.n_readout,
-        n_free_angles=args.n_free_angles,
         sector=args.sector,
         noise_level=args.noise_level,
         rng=ctx.obj.rng,

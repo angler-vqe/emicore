@@ -8,9 +8,9 @@ import click
 import torch
 
 from .gp import KERNELS
-from .bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
-from .bo import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
-from .bo import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
+from .bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer
+from .bo import SMOOptimizer, EMICOREOptimizer
+from .bo import ExpectedImprovement, LowerConfidenceBound
 
 
 class FinalProperties:
@@ -65,12 +65,6 @@ def csobj(dtype, sep=',', maxsplit=-1, length=-1):
             raise RuntimeError(f'Invalid number of fields. Provided {len(result)} but expected {length}!')
         return result
     return wrapped
-
-
-def option_dict(string):
-    if isinstance(string, dict):
-        return string
-    return dict([elem.split('=', 1) for elem in string.split(',') if elem])
 
 
 def _append_param(func, param):
@@ -251,8 +245,6 @@ OPTIMIZER_SETUPS = {
     'oneshot': (OneShotOptimizer, ()),
     'gd': (GradientDescentOptimizer, ('lr', 'n_iter')),
     'lbfgs': (LBFGSOptimizer, ('max_iter', 'max_eval', 'max_ls', 'gtol')),
-    'tlbfgs': (TorchLBFGSOptimizer, ('lr', 'max_iter')),
-    'mexicore': (EILVSOptimizer, ('gridsize', 'weighted', 'stabilize_interval', 'seq_reg', 'seq_reg_init')),
     'smo': (SMOOptimizer, ('stabilize_interval',)),
     'emicore': (EMICOREOptimizer, (
         'stabilize_interval',
@@ -270,9 +262,7 @@ OPTIMIZER_SETUPS = {
 
 ACQUISITION_FNS = {
     'lcb': (LowerConfidenceBound, {'beta': 0.1}),
-    'alcb': (AdaptiveLCB, {'d': None}),
     'ei': (ExpectedImprovement, {}),
-    'wei': (WeightedExpectedImprovement, {}),
 }
 
 
@@ -285,8 +275,7 @@ class QCParams(OptionParams):
     h_coupling: csobj(float, length=3) = '1,1,1', 'External magnetic field coupling'
     pbc: click.BOOL = True, 'Set Periodic/Open Boundary Conditions PBC or OBC. PBC default'
     circuit: click.Choice(['generic', 'esu2']) = 'generic', 'Circuit name'  # noqa: F821
-    noise_level: float = 0.0, 'Circuit noise level'
-    free_angles: int = None, 'number of free angles'
+    noise_level: PositiveFloat = 0.0, 'Circuit noise level'
     assume_exact: click.BOOL = False, 'Assume energy is exact or an estimate.'
     cache: click.Path(dir_okay=False) = None, 'Cache for ground state wave function and initial train data.'
     train_data_mode: click.Choice(('cache', 'compute')) = 'compute', 'Inital data mode'  # noqa: F821
@@ -299,30 +288,26 @@ class KernelParams(OptionParams):
 
 class GPParams(OptionParams):
     kernel: click.Choice(list(KERNELS)) = 'vqe', 'Name of the kernel'
-    reg_term: float = 1e-10, 'Observation noise'
+    reg_term: PositiveFloat = 1e-10, 'Observation noise'
     reg_term_estimates: int = None, 'Number of estimates for reg_term'
     kernel_params: KernelParams() = '', 'Kernel options'
     prior_mean: click.BOOL = False, 'Setting non zero mean if True'
 
 
 class AcqParams(OptionParams):
-    func: click.Choice(['lcb', 'ei', 'alcb', 'wei']) = 'lcb', ''  # noqa: F821
+    func: click.Choice(list(ACQUISITION_FNS)) = 'ei', ''  # noqa: F821
     optim: click.Choice(list(OPTIMIZER_SETUPS)) = 'oneshot', ''
-    lr: float = 1., ''
+    lr: PositiveFloat = 1., ''
     n_iter: int = None, ''
     max_iter: int = 200, ''
     max_eval: int = None, ''
     max_ls: int = None, ''
-    gtol: float = None, ''
-    gridsize: int = None, ''
-    weighted: click.BOOL = None, ''
+    gtol: PositiveFloat = None, ''
     stabilize_interval: int = None, ''
-    seq_reg: float = 0.0, ''
-    seq_reg_init: int = -20, ''
     pairsize: int = 20, ''
     gridsize: int = 100, ''
     samplesize: int = 100, ''
-    corethresh: float = 1.0, ''
+    corethresh: PositiveFloat = 1.0, ''
     corethresh_width: int = 10, ''
     core_trials: int = 10, ''
     smo_steps: int = 100, ''
@@ -330,13 +315,13 @@ class AcqParams(OptionParams):
 
 
 class HyperParams(OptionParams):
-    optim: click.Choice(['adam', 'grid', 'none']) = 'grid', ''  # noqa: F821
+    optim: click.Choice(['grid', 'none']) = 'grid', ''  # noqa: F821
     loss: click.Choice(['mll', 'loo']) = 'loo', ''  # noqa: F821
-    lr: float = 1e-4, ''
-    threshold: float = 0.0, ''
+    lr: PositiveFloat = 1e-4, ''
+    threshold: PositiveFloat = 0.0, ''
     steps: int = 200, ''
     interval: str = '', ''
-    max_gamma: float = 10.0, ''
+    max_gamma: PositiveFloat = 10.0, ''
 
 
 class BOParams(OptionParams):
@@ -346,5 +331,3 @@ class BOParams(OptionParams):
     n_iter: int = 50, 'Iteration for Bayesian Optimization'
     acq_params: AcqParams() = '', ''
     hyperopt: HyperParams() = '', ''
-    stabilize_interval: int = 0, 'Iteration for Optimization'
-    iter_mode: click.Choice(['step', 'qc']) = 'step', ''  # noqa: F821

@@ -71,7 +71,6 @@ class BayesOptCLI:
             self.args.j_coupling,
             self.args.h_coupling,
             n_readout=self.args.n_readout,
-            n_free_angles=self.args.free_angles,
             sector=self.args.sector,
             circuit=self.args.circuit,
             noise_level=self.args.noise_level,
@@ -116,12 +115,8 @@ class BayesOptCLI:
 
         kernel_kwargs = {
             'vqe': {'sigma_0': sigma_0, 'gamma': gamma},
-            'sharedvqe': {'sigma_0': sigma_0, 'gamma': gamma, 'eta': 1.0, 'share': self.args.n_qbits},
             'rbf': {'sigma_0': sigma_0, 'gamma': gamma},
             'periodic': {'sigma_0': sigma_0, 'gamma': gamma},
-            'matern': {'nu': 2.5},
-            'torusrbf': {'sigma_0': sigma_0, 'gamma': gamma},
-            'torusmatern': {'nu': 2.5},
         }[self.args.kernel]
 
         return KERNELS[self.args.kernel](**kernel_kwargs)
@@ -240,25 +235,6 @@ class BayesOptCLI:
             'mll': self.model.log_likelihood,
         }[self.args.hyperopt.loss]
 
-    @final_property
-    def kernel_optim(self):
-        if self.args.hyperopt.optim != 'adam':
-            raise RuntimeError(f'Cannot use kernel_optim with {self.args.hyperopt.optim}!')
-        params = list(self.kernel.parameters())
-        for param in params:
-            param.requires_grad = True
-        if not params:
-            logging.warning(f'{self.kernel} has no hyper parameters to optimize!')
-        return torch.optim.Adam(params, lr=self.args.hyperopt.lr)
-
-    @final_property
-    def n_iter(self):
-        if self.args.iter_mode == 'qc' and self.args.acq_params.optim == 'mexicore':
-            # TODO: this does not consider stabilize_interval
-            return (self.args.n_iter - self.args.train_samples) // 2
-
-        return self.args.n_iter
-
     def hyperopt(self, step):
         if self.args.hyperopt.optim == 'grid':
             if self.interval(step):
@@ -271,14 +247,6 @@ class BayesOptCLI:
                     num=self.args.hyperopt.steps,
                     loss=self.args.hyperopt.loss
                 )
-        elif self.args.hyperopt.optim == 'adam':
-            if self.interval(step):
-                for step in range(self.args.hyperopt.steps):
-                    self.kernel_optim.zero_grad()
-                    loss = self.lossfn()
-                    loss.backward()
-                    self.kernel_optim.step()
-                    self.model.reinit()
 
 
 @main.command('train')
@@ -299,7 +267,6 @@ def train(ctx, **kwargs):
             ns.hyperopt(bayes_step)
             ns.bayes_opt.step(bayes_step)
     finally:
-
         best_params = torch.stack(ns.log['best_params'], dim=0)
         overlap = ns.sampler.exact_overlap(best_params.numpy())
 
@@ -323,8 +290,6 @@ def train(ctx, **kwargs):
 
         if args.reg_term_estimates is not None and args.reg_term_estimates > 0:
             ctx.params['reg_term'] = ns.model.reg
-        if args.acq_params.optim == 'mexicore':
-            data_dict['k_last'] = ns.log['k_last']
 
         with h5py.File(args.output_file, 'w') as fd:
             for key, val in state_dict.items():

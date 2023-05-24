@@ -5,7 +5,7 @@ from functools import wraps
 import numpy as np
 import torch
 
-from .utils import SingularGramError
+from .util import SingularGramError
 
 
 KERNELS = {}

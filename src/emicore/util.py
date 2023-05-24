@@ -133,7 +133,6 @@ class DataSampler:
         n_layers,
         j=(1., 1., 1.),
         h=(1., 1., 1.),
-        n_free_angles=None,
         rng=None,
         sector=-1,
         noise_level=0.,
@@ -142,13 +141,9 @@ class DataSampler:
         circuit='generic',
         cache_fname='',
     ):
-        n_circuit_params = circuit_param_size(circuit, n_layers)
-        if n_free_angles is None:
-            n_free_angles = n_circuit_params * n_qbits
-        self.n_free_angles = min(n_circuit_params * n_qbits, n_free_angles)
+        self.n_circuit_params = circuit_param_size(circuit, n_layers)
         if rng is None:
             rng = np.random.default_rng()
-        self.x_template = rng.uniform(0, 2 * math.pi, (1, n_circuit_params, n_qbits))
         self.rng = rng
 
         self.kwargs = {
@@ -204,21 +199,7 @@ class DataSampler:
 
     def sample(self, n_samples=1000, known=True):
         # expand and fill in template
-        x_data = self.x_template.repeat(n_samples, axis=0)
-        x_data.reshape(
-            x_data.shape[0], np.prod(x_data.shape[1:], dtype=int)
-        )[:, :self.n_free_angles] = self.rng.uniform(0, 2 * math.pi, (n_samples, self.n_free_angles))
-
-        retval = torch.from_numpy(x_data)
-        # compute true values if known
-        if known:
-            retval = (retval, self.true_energy(x_data))
-        return retval
-
-    def sample_linspace(self, n_samples=50, axes=(0, 0), known=True):
-        # expand and fill in template with linspace
-        x_data = self.x_template.repeat(n_samples, axis=0)
-        x_data[(slice(None),) + axes] = torch.linspace(0, 2 * math.pi, n_samples)
+        x_data = self.rng.uniform(0, 2 * math.pi, (n_samples, self.n_circuit_params))
 
         retval = torch.from_numpy(x_data)
         # compute true values if known
@@ -282,7 +263,6 @@ class DataSampler:
             tuple(self.kwargs['j']),
             tuple(self.kwargs['h']),
             int(self.kwargs['n_readout']),
-            int(self.n_free_angles),
             int(self.kwargs['mom_sector']),
             str(self.kwargs['circuit']),
             float(self.kwargs['noise_level']),

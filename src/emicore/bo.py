@@ -6,7 +6,7 @@ import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from scipy.optimize import minimize
 
-from .utils import SingularGramError
+from .util import SingularGramError
 
 
 class BayesianOptimization:
@@ -98,35 +98,6 @@ class GradientDescentOptimizer(Optimizer):
             loss.backward(retain_graph=True)
             optim.step()
             scheduler.step(loss)
-        ind = torch.argmax(x_values).item()
-        x_best = x_candidates[[ind]].detach()
-        return x_best
-
-
-class TorchLBFGSOptimizer(Optimizer):
-    def __init__(self, *args, lr=1., max_iter=20, max_eval=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.lr = lr
-        self.max_iter = max_iter
-        self.max_eval = max_eval
-
-    def __call__(self, model, state):
-        x_candidates = self.sampler(lambda x: self.acquisition_fn(model, x, state['y_best'], state['step']))
-        x_candidates = torch.cat((x_candidates, state['x_best'][None, ...]))
-        x_candidates.requires_grad = True
-        optim = torch.optim.LBFGS((x_candidates,), lr=self.lr, max_iter=self.max_iter, max_eval=self.max_eval)
-        x_values = None
-
-        def closure():
-            nonlocal x_values
-            x_values = self.acquisition_fn(model, x_candidates, state['y_best'], state['step'])
-            loss = -x_values.sum()
-            optim.zero_grad()
-            loss.backward(retain_graph=True)
-            return loss
-
-        optim.step(closure)
-
         ind = torch.argmax(x_values).item()
         x_best = x_candidates[[ind]].detach()
         return x_best
@@ -388,98 +359,6 @@ class EMICOREOptimizer(SMOOptimizer):
         return axes[torch.stack(maximps).argmax()]
 
 
-class EILVSOptimizer(SMOOptimizer):
-    def __init__(
-        self,
-        *args,
-        gridsize=100,
-        weighted=False,
-        seq_reg=0.0,
-        seq_reg_init=-20,
-        **kwargs
-    ):
-        super().__init__(*args, **kwargs)
-        self.gridsize = gridsize
-        self.weighted = weighted
-        self.seq_reg = seq_reg
-        self.seq_reg_init = seq_reg_init
-
-    def _axis_distr(self, model, state):
-        shape = state['x_start'].shape
-        eye = torch.eye(shape.numel())
-        if 'k_best' in state:
-            k_last = np.ravel_multi_index(state['k_best'], shape)
-            eye = torch.cat([eye[:k_last], eye[k_last + 1:]], dim=0)
-
-        shift = (eye * math.pi / 3.)[..., None, :] * torch.tensor([-1., 1.])[None, :, None]
-        x_split = (state['x_start'][None, None] + shift.reshape(eye.shape[0], 2, *shape)) % math.tau
-        distr = model.posterior(x_split, diag=False)
-        return x_split, distr
-
-    def _shift_index(self, k_distr):
-        if k_distr.covrank == 2:
-            return ()
-        if k_distr.covrank == 1:
-            return [[k_distr.var.argmax()]]
-        if k_distr.covrank == 0:
-            return []
-        raise RuntimeError('Unexpected rank!')
-
-    def choose_axis(self, model, state):
-        '''Choose the next axis, setting ``state['k_best']``.'''
-        shape = state['x_start'].shape
-        numel = shape.numel()
-        lins = torch.linspace(0, math.tau, self.gridsize + 2)[1:-1]
-        eye = torch.eye(numel).reshape((numel, *shape))
-        if 'k_best' in state:
-            k_last = np.ravel_multi_index(state['k_best'], shape)
-            eye = torch.cat([eye[:k_last], eye[k_last + 1:]], dim=0)
-        x_candidates = (
-            state['x_start'][None, None] + lins[(slice(None), None) + (None,) * len(shape)] * eye[None, :]
-        ).reshape((self.gridsize, eye.shape[0], *shape)) % math.tau
-
-        # TODO: remove this hack
-        model._state = state
-        acq_values = self.acquisition_fn(model, x_candidates, state['y_best'], state['step'])
-        del model._state
-
-        if self.weighted:
-            x_split, distr = self._axis_distr(model, state)
-            acq_values = acq_values / (distr.covrank + 1).to(state['x_start'])[None]
-            state['min_rank'] = distr.covrank.min().item()
-
-        if self.seq_reg:
-            if 'k_best' in state:
-                acq_values += (
-                    state['step']
-                    - torch.cat((state['k_step_last'][:k_last], state['k_step_last'][k_last + 1:]))[None]
-                ) / numel
-            else:
-                state['k_step_last'] = torch.full((numel,), self.seq_reg_init)
-                acq_values += (state['step'] - state['k_step_last'][None]) / numel
-
-        if acq_values.isnan().any():
-            logging.warning('Encountered nan values in acquisition function!')
-        acq_dir_max = acq_values.reshape((self.gridsize, eye.shape[0])).nan_to_num(0).amax(0)
-        acq_max = acq_dir_max.argmax()
-
-        state['acq_dir_perc'] = acq_dir_max
-        state['acq_max'] = acq_dir_max[acq_max].item()
-
-        k_curr = acq_max + ('k_best' in state and acq_max >= k_last)
-        if self.seq_reg:
-            state['k_step_last'][k_curr] = state['step']
-
-        return np.unravel_index(k_curr, shape)
-
-    def __call__(self, model, state):
-        x_meas = super().__call__(model, state)
-        k_distr = model.posterior(x_meas, diag=False)
-
-        index = self._shift_index(k_distr)
-        return x_meas[index]
-
-
 class AcquisitionFunction:
     def __call__(self, model, x_cand, step):
         pass
@@ -495,27 +374,6 @@ class ExpectedImprovement(AcquisitionFunction):
         return (f_min - distr.mean) * cdf + distr.var * pdf
 
 
-class WeightedExpectedImprovement(AcquisitionFunction):
-    def __call__(self, model, x_cand, y_best, step):
-        f_min = y_best.item()
-        if x_cand.ndim != 4:
-            raise RuntimeError('Number of dimensions does not match (gridsize, directions, wire_params, n_qbits).')
-
-        gridsize, numel, n_params, n_qbits = x_cand.shape
-        x_split = x_cand.reshape(gridsize // 2, 2, numel, n_params, n_qbits).permute(0, 2, 1, 3, 4)
-        distr = model.posterior(x_split, diag=False)
-        ranks = distr.covrank.to(x_cand).mean(0, keepdim=True) + 1.
-
-        # TODO: remove this hack
-        if hasattr(model, '_state'):
-            model._state['min_rank'] = (ranks - 1.).min().item()
-
-        pdf = distr.pdf(f_min)
-        cdf = distr.cdf(f_min)
-        result = ((f_min - distr.mean) * cdf + distr.var * pdf) / ranks[..., None]
-        return result.permute(0, 2, 1).reshape(gridsize, numel)
-
-
 class LowerConfidenceBound(AcquisitionFunction):
     def __init__(self, beta=1.0):
         self.beta = beta
@@ -523,23 +381,3 @@ class LowerConfidenceBound(AcquisitionFunction):
     def __call__(self, model, x_cand, y_best, step):
         mean, var = model.posterior(x_cand, diag=True).diag_stats
         return - mean + self.beta * var ** .5
-
-
-class AdaptiveLCB(AcquisitionFunction):
-    def __init__(self, d=1, a=1, b=1, r=2*np.pi, delta=0.01):
-        self.d = d
-        self.a = a
-        self.b = b
-        self.r = r
-        self.delta = delta
-
-    def __call__(self, model, x_cand, y_best, step):
-        mean, var = model.posterior(x_cand, diag=True).diag_stats
-        t = step + 1.0
-        beta_1 = 2 * np.log(2 * t * np.pi ** 2 / (3 * self.delta))
-        beta_2 = 2 * self.d * np.log(
-            t ** 2 * self.d * self.b * self.r * np.log(4 * self.d * self.a / self.delta) ** .5
-        )
-        exploration_term = ((beta_1 + beta_2) * var) ** .5
-        exploitation_term = mean
-        return - exploitation_term + exploration_term
