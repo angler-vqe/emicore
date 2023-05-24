@@ -269,7 +269,7 @@ ACQUISITION_FNS = {
 class QCParams(OptionParams):
     n_layers: int = 1, 'Number of circuit layers'
     n_qbits: int = 2, 'Number of QBits'
-    sector: int = -1, 'Sector -1 or 1'
+    sector: int = 1, 'Sector -1 or 1'
     n_readout: int = 0, 'Number of shots'
     j_coupling: csobj(float, length=3) = '1,1,1', 'Nearest Neigh. interaction coupling'
     h_coupling: csobj(float, length=3) = '1,1,1', 'External magnetic field coupling'
@@ -289,7 +289,7 @@ class KernelParams(OptionParams):
 class GPParams(OptionParams):
     kernel: click.Choice(list(KERNELS)) = 'vqe', 'Name of the kernel'
     reg_term: PositiveFloat = 1e-10, 'Observation noise'
-    reg_term_estimates: int = None, 'Number of estimates for reg_term'
+    reg_term_estimates: int = 16, 'Number of estimates for reg_term'
     kernel_params: KernelParams() = '', 'Kernel options'
     prior_mean: click.BOOL = False, 'Setting non zero mean if True'
 
@@ -299,10 +299,10 @@ class AcqParams(OptionParams):
     optim: click.Choice(list(OPTIMIZER_SETUPS)) = 'oneshot', ''
     lr: PositiveFloat = 1., ''
     n_iter: int = None, ''
-    max_iter: int = 200, ''
-    max_eval: int = None, ''
+    max_iter: int = 15000, ''
+    max_eval: int = 15000, ''
     max_ls: int = None, ''
-    gtol: PositiveFloat = None, ''
+    gtol: PositiveFloat = 1e-70, ''
     stabilize_interval: int = None, ''
     pairsize: int = 20, ''
     gridsize: int = 100, ''
@@ -325,7 +325,7 @@ class HyperParams(OptionParams):
 
 
 class BOParams(OptionParams):
-    train_samples: int = 5000, ''
+    train_samples: int = 1, ''
     candidate_samples: int = 500, ''
     candidate_shots: int = 10, ''
     n_iter: int = 50, 'Iteration for Bayesian Optimization'
