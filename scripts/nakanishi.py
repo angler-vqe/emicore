@@ -12,7 +12,7 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-from emicore.bayesopt.util import DataSampler
+from emicore.util import DataSampler
 from emicore.qc import measure_overlap, measure_energy
 
 

@@ -17,7 +17,24 @@ from qiskit.quantum_info import state_fidelity
 from qiskit.utils import QuantumInstance
 from qiskit.circuit import Parameter
 
-from .utils import expand_params
+
+def circuit_param_size(circuit, n_layers):
+    if circuit == 'generic':
+        return 2 + n_layers * 4
+    elif circuit == 'esu2':
+        return 2 + n_layers * 2
+    raise RuntimeError(f'No such circuit: \'{circuit}\'')
+
+
+def expand_params(angles, n_qbits):
+    if len(angles.shape) == 1:
+        angles = angles[None]
+    if len(angles.shape) == 2:
+        shape = angles.shape + (n_qbits,)
+        angles = np.repeat(angles, n_qbits, axis=1).reshape(shape)
+    elif len(angles.shape) != 3:
+        raise TypeError('Parameter values have to have 1, 2 or 3 dimensions.')
+    return angles
 
 
 def heisenberg_hamiltonian(n_qbits, j=[1.0, 1.0, 1.0], h=[0.0, 0.0, 1.0], pbc=True):

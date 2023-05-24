@@ -1,6 +1,3 @@
-import hashlib
-import os
-import pickle
 import re
 from collections import namedtuple
 from argparse import Namespace
@@ -8,14 +5,12 @@ from typing import NamedTuple
 from functools import wraps, partial
 
 import click
-import h5py
-import numpy as np
 import torch
 
-from .bayesopt.gp import KERNELS
-from .bayesopt.bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
-from .bayesopt.bo import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
-from .bayesopt.bo import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
+from .gp import KERNELS
+from .bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer, TorchLBFGSOptimizer
+from .bo import SMOOptimizer, EILVSOptimizer, EMICOREOptimizer
+from .bo import ExpectedImprovement, WeightedExpectedImprovement, LowerConfidenceBound, AdaptiveLCB
 
 
 class FinalProperties:
@@ -97,55 +92,6 @@ def namedtuple_as_dict(input):
     if isinstance(input, (tuple, list)):
         return type(input)(namedtuple_as_dict(value) for value in input)
     return input
-
-
-def arrhash(*args):
-    hasher = hashlib.sha256()
-    for arg in args:
-        if isinstance(arg, (np.ndarray, torch.Tensor)):
-            arr = np.array(arg)
-            flag = arr.flags.writeable
-            arr.flags.writeable = False
-            hasher.update(arr.data)
-            arr.flags.writeable = flag
-        else:
-            hasher.update(pickle.dumps(arg))
-    return hasher.hexdigest()
-
-
-def arrcache(fname, func, identifiers, keys='value'):
-    if fname is None:
-        return func()
-    single = isinstance(keys, str)
-    if single:
-        keys = (keys,)
-
-    identifier = arrhash(*identifiers)
-    results = None
-
-    if os.path.exists(fname):
-        with h5py.File(fname, 'r') as fd:
-            if identifier in fd:
-                results = tuple(
-                    torch.from_numpy(dset[()]) if dset.attrs.get('type', 'numpy') == 'torch' else dset[()]
-                    for dset in (fd[f'{identifier}/{key}'] for key in keys)
-                )
-
-    if results is None:
-        results = func()
-        if single:
-            results = (results,)
-        try:
-            with h5py.File(fname, 'a') as fd:
-                for key, result in zip(keys, results):
-                    fd[f'{identifier}/{key}'] = result
-                    fd[f'{identifier}/{key}'].attrs['type'] = 'torch' if isinstance(result, torch.Tensor) else 'numpy'
-        except OSError as error:
-            raise RuntimeError(f'Unable to cache key \'{identifier}\'.') from error
-
-    if single:
-        results, = results
-    return results
 
 
 class Data(NamedTuple):

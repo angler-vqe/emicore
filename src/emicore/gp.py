@@ -5,7 +5,7 @@ from functools import wraps
 import numpy as np
 import torch
 
-from src.emicore.utils import SingularGramError
+from .utils import SingularGramError
 
 
 KERNELS = {}

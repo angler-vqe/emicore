@@ -12,11 +12,10 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-from emicore.bayesopt.bo import BayesianOptimization
-from emicore.bayesopt.gp import GaussianProcess, KERNELS
-from emicore.bayesopt.util import DataSampler
+from emicore.bo import BayesianOptimization
+from emicore.gp import GaussianProcess, KERNELS
 
-from emicore.utils import grid_search_gamma, interval_schedule
+from emicore.util import DataSampler, grid_search_gamma, interval_schedule
 from emicore.cli import QCParams, GPParams, BOParams, ACQUISITION_FNS, OPTIMIZER_SETUPS, TrueSolution, Data
 from emicore.cli import namedtuple_as_dict, final_property
 
