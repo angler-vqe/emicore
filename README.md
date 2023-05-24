@@ -13,9 +13,9 @@ $ cd emicore
 $ python -m venv .venv
 ```
 
-Install the module with pip:
+Install the emicore module with pip:
 ```bash
-$  .venv/bin/pip install -e .
+$ .venv/bin/pip install -e .
 ```
 
 ## Running the baselines (NFT)
@@ -66,7 +66,7 @@ $ .venv/bin/python scripts/bayesian_optimization.py train \
       --n-readout 1024 \
       --n-iter 300 \
       --kernel vqe \
-      --acq-params 'func=ei,optim=emicore,pairsize=20,gridsize=100,corethresh=1.0,corethres_width=10,samplesize=100,smo-steps=0,smo-axis=True' \
+      --acq-params 'func=ei,optim=emicore,pairsize=20,gridsize=100,corethresh=1.0,corethresh_width=10,samplesize=100,smo-steps=0,smo-axis=True' \
       --hyperopt 'optim=grid,max_gamma=20,interval=100*1+20*9+10*100,steps=120,loss=mll' \
       --cache cache.h5
 ```

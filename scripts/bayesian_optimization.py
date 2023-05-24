@@ -194,7 +194,7 @@ class BayesOptCLI:
                 f'last energy: {observables["y_start"]:.3e}, '
                 f'true energy: {y_true:.3e}, '
                 f'best energy: {observables["y_best"]:.3e}, '
-                f'gamma: {observables.get("kernel.gamma")}'
+                f'gamma: {observables.get("kernel.gamma"):.3f}'
             )
 
             storables = (
