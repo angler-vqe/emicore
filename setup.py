@@ -10,7 +10,7 @@ setup(
         'torch>=1.5.0',
         'numpy',
         'scipy',
-        'qiskit',
+        'qiskit==0.42.1',
         'click',
         'h5py',
         'tqdm',
