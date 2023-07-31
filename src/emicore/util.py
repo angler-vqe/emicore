@@ -138,10 +138,10 @@ class DataSampler:
         noise_level=0.,
         n_readout=0,
         pbc=True,
-        circuit='generic',
+        circuit='esu2',
         cache_fname='',
     ):
-        self.param_shape = (n_qbits, n_layers)
+        self.param_shape = (circuit_param_size(circuit, n_layers), n_qbits)
         if rng is None:
             rng = np.random.default_rng()
         self.rng = rng
