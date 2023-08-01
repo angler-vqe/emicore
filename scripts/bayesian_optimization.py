@@ -123,6 +123,12 @@ class BayesOptCLI:
 
     @final_property
     def train_data(self):
+        if hasattr(self.args, 'train_data') and self.args.train_data is not None:
+            with h5py.File(self.args.train_data, 'r') as fd:
+                return Data(
+                    torch.from_numpy(fd['x_train'][()]),
+                    torch.from_numpy(fd['y_train'][()]),
+                )
         return Data(*self.sampler.cached_sample(
             self.args.train_samples, key='train', force_compute=self.args.train_data_mode == 'compute'
         ))
@@ -251,6 +257,7 @@ class BayesOptCLI:
 
 @main.command('train')
 @click.argument('output_file', type=click.Path(writable=True))
+@click.option('--train-data', type=click.Path(exists=True))
 @QCParams.options()
 @GPParams.options()
 @BOParams.options()
