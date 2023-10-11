@@ -34,7 +34,6 @@ def nakanishi_step(x_start, y_start, k_dim, true_energy):
     c0, c1, c2 = x_pinv @ y_train
     theta = torch.atan2(c2, c1) + math.pi
 
-    y_theta = c0 + c1 * theta.cos() + c2 * theta.sin()
     shift_theta = torch.sparse_coo_tensor(list(zip(k_dim)), theta, x_start.shape)
     x_theta = (x_start + shift_theta) % math.tau
     y_theta = c0 + c1 * theta.cos() + c2 * theta.sin()
@@ -53,10 +52,9 @@ def dim_iterator(shape, random=False):
 
 @click.group()
 @click.option('--seed', type=int, default=0xDEADBEEF)
-@click.option('--aim-repo', type=click.Path(writable=True, file_okay=False))
 @click.option('--json-log', type=click.Path(writable=True, dir_okay=False))
 @click.pass_context
-def main(ctx, seed, aim_repo, json_log):
+def main(ctx, seed, json_log):
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -99,9 +97,12 @@ def train(ctx, **kwargs):
         cache_fname=args.cache
     )
 
-    x_start, y_start = sampler.cached_sample(
-        1, key='train', force_compute=args.train_data_mode == 'compute'
-    )
+    if args.train_data is not None:
+        with h5py.File(args.train_data, 'r') as fd:
+            x_start = torch.from_numpy(fd['x_train'][()])
+            y_start = torch.from_numpy(fd['y_train'][()])
+    else:
+        x_start, y_start = sampler.sample(1)
     y_best = y_start
 
     # computes true wf and true energy for ground and first excited states

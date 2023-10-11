@@ -50,9 +50,7 @@ class GenerateCLI:
 
     @final_property
     def train_data(self):
-        return Data(*self.sampler.cached_sample(
-            self.args.train_samples, key='train', force_compute=self.args.train_data_mode == 'compute'
-        ))
+        return Data(*self.sampler.sample(self.args.train_samples))
 
 
 @main.command('make-train')

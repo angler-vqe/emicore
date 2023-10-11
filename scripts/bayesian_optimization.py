@@ -123,15 +123,14 @@ class BayesOptCLI:
 
     @final_property
     def train_data(self):
-        if hasattr(self.args, 'train_data') and self.args.train_data is not None:
+        if self.args.train_data is None:
+            return Data(*self.sampler.sample(self.args.train_samples))
+        else:
             with h5py.File(self.args.train_data, 'r') as fd:
                 return Data(
                     torch.from_numpy(fd['x_train'][()]),
                     torch.from_numpy(fd['y_train'][()]),
                 )
-        return Data(*self.sampler.cached_sample(
-            self.args.train_samples, key='train', force_compute=self.args.train_data_mode == 'compute'
-        ))
 
     @final_property
     def true_solution(self):

@@ -277,9 +277,8 @@ class QCParams(OptionParams):
     circuit: click.Choice(['generic', 'esu2']) = 'generic', 'Circuit name'  # noqa: F821
     noise_level: float = 0.0, 'Circuit noise level'
     assume_exact: click.BOOL = False, 'Assume energy is exact or an estimate.'
-    cache: click.Path(dir_okay=False) = None, 'Cache for ground state wave function and initial train data.'
-    train_data_mode: click.Choice(('cache', 'compute')) = 'compute', 'Inital data mode'  # noqa: F821
-
+    cache: click.Path(dir_okay=False) = None, 'Cache for ground state wave function'
+    train_data: click.Path(exists=True) = None
 
 class KernelParams(OptionParams):
     sigma_0: PositiveFloat = None, 'Prior variance'
