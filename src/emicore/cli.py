@@ -7,7 +7,7 @@ from functools import wraps, partial
 import click
 import torch
 
-from .gp import KERNELS
+from .gp import KERNELS, INDUCERS
 from .bo import OneShotOptimizer, GradientDescentOptimizer, LBFGSOptimizer
 from .bo import SMOOptimizer, EMICOREOptimizer
 from .bo import ExpectedImprovement, LowerConfidenceBound
@@ -111,6 +111,58 @@ class PositiveFloatParam(click.ParamType):
 
 
 PositiveFloat = PositiveFloatParam()
+
+
+class AnnotatedFuncFromDict(click.ParamType):
+    name = 'AnnotatedFuncFromDict'
+
+    def __init__(self, fndict, partial=False):
+        super().__init__()
+        self.fndict = fndict
+        self.partial = partial
+
+    def convert(self, value, param, ctx):
+        if callable(value):
+            return value
+
+        name, *kwargstr = value.split(':')
+        if name not in self.fndict:
+            available = '\', \''.join(self.fndict)
+            raise click.BadParameter(
+                f"No such function: '{name}'. Available functions are '{available}'")
+        func = self.fndict[name]
+
+        if func is None:
+            return None
+
+        if isinstance(func, type):
+            annotations = func.__init__.__annotations__
+        else:
+            annotations = func.__annotations__
+
+        kwargtups = dict([obj.split('=', 1) for obj in kwargstr if obj])
+        missing = set(kwargtups).difference(annotations)
+        if missing:
+            invalid = '\', \''.join(missing)
+            available = '\', \''.join(annotations)
+            raise click.BadParameter(
+                f"No such arguments for function '{name}': '{invalid}'. "
+                f"Valid arguments are: '{available}'"
+            )
+
+        kwargs = {key: annotations[key](val) for key, val in kwargtups.items()}
+
+        if self.partial:
+            retval = partial(func, **kwargs)
+        else:
+            retval = func(**kwargs)
+
+        try:
+            retval._dictsource = {'funcname': name, **kwargs}
+        except AttributeError:
+            pass
+
+        return retval
 
 
 class OptionParams(click.ParamType):
@@ -291,6 +343,7 @@ class GPParams(OptionParams):
     reg_term_estimates: int = 16, 'Number of estimates for reg_term'
     kernel_params: KernelParams() = '', 'Kernel options'
     prior_mean: click.BOOL = False, 'Setting non zero mean if True'
+    inducer: AnnotatedFuncFromDict(INDUCERS) = None, 'Method of inducing point selection'
 
 
 class AcqParams(OptionParams):

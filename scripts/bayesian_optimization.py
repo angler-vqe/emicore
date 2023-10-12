@@ -146,7 +146,12 @@ class BayesOptCLI:
             logging.info(f'Estimated {self.args.reg_term:0.2e} for reg_term')
 
         model = GaussianProcess(
-            self.train_data.x, self.train_data.y, kernel=self.kernel, reg=self.args.reg_term, mean=prior_mean
+            self.train_data.x,
+            self.train_data.y,
+            kernel=self.kernel,
+            reg=self.args.reg_term,
+            mean=prior_mean,
+            inducer=self.args.inducer,
         )
 
         return model

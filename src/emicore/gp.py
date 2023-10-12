@@ -10,12 +10,21 @@ from .util import SingularGramError
 
 KERNELS = {}
 
+INDUCERS = {'none': None}
+
 
 def register_kernel(name):
     def wrapped(kernel):
         kernel.__serialized_name__ = name
         KERNELS[name] = kernel
         return kernel
+    return wrapped
+
+
+def register_inducer(name):
+    def wrapped(func):
+        INDUCERS[name] = func
+        return func
     return wrapped
 
 
@@ -280,6 +289,18 @@ class PeriodicKernel(Kernel):
         return torch.full(x1.shape[:-self.n_feature_dim], self.sigma_0_sq, dtype=x1.dtype)
 
 
+@register_inducer('last_slack')
+class LastSlackInducer:
+    def __init__(self, retain: int, slack: int):
+        self.retain = retain
+        self.slack = slack
+
+    def __call__(self, model):
+        if len(model.x_train) > self.retain + self.slack:
+            return model.x_train[-self.retain:], model.y_train[-self.retain:]
+        return None
+
+
 class GaussianProcess:
     '''A gaussian process with noise using cholesky decomposition.
     The mean function is constant zero.
@@ -313,6 +334,8 @@ class GaussianProcess:
         Current solution x for Kx = y, where K is the covariance matrix and y are the training sample function values.
     reg : float, optional
         Regularization parameter for training data. Default is 0.1.
+    inducer : callable, optional
+        Function to select inducing points. Default is None.
 
     '''
     _state_attributes = (
@@ -326,7 +349,8 @@ class GaussianProcess:
         'reg',
     )
 
-    def __init__(self, x_train, y_train, kernel, reg=0.1, mean=0.0):
+    def __init__(self, x_train, y_train, kernel, reg=0.1, mean=0.0, inducer=None):
+        self.inducer = inducer
         self.initialize(x_train, y_train, kernel, reg, mean=0.0)
 
     def __repr__(self):
@@ -547,6 +571,8 @@ class GaussianProcess:
         self.cholesky = chol
         self.cov_inv_y = cov_inv_y
 
+        self.induce()
+
     def reinit(self):
         self.initialize(self.x_train, self.y_train, self.kernel, reg=self.reg, mean=self.mean)
 
@@ -578,3 +604,10 @@ class GaussianProcess:
             raise SingularGramError('Updated Gram matrix is singular!') from error
 
         return L21, L22
+
+    def induce(self):
+        if self.inducer is not None:
+            inducing_val = self.inducer(self)
+            if inducing_val is not None:
+                x_train, y_train = inducing_val
+                self.initialize(x_train, y_train, self.kernel, reg=self.reg, mean=self.mean)
