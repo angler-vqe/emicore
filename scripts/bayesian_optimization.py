@@ -146,7 +146,12 @@ class BayesOptCLI:
             logging.info(f'Estimated {self.args.reg_term:0.2e} for reg_term')
 
         model = GaussianProcess(
-            self.train_data.x, self.train_data.y, kernel=self.kernel, reg=self.args.reg_term, mean=prior_mean
+            self.train_data.x,
+            self.train_data.y,
+            kernel=self.kernel,
+            reg=self.args.reg_term,
+            mean=prior_mean,
+            inducer=self.args.inducer,
         )
 
         return model
@@ -315,27 +320,6 @@ def init_cache(ctx, **kwargs):
     args = Namespace(**kwargs)
     args.train_data_mode = 'cache'
     ns = BayesOptCLI(args, ctx)
-
-    if args.cache is None:
-        logging.info('Nothing initialized!')
-    elif ns.train_data is not None and ns.true_solution is not None:
-        logging.info(f'Initialized {args.cache}.')
-
-
-@main.command('make-train')
-@click.argument('output')
-@QCParams.options()
-@GPParams.options()
-@BOParams.options()
-@click.pass_context
-def make_train(ctx, **kwargs):
-    args = Namespace(**kwargs)
-    args.train_data_mode = 'cache'
-    ns = BayesOptCLI(args, ctx)
-
-    with h5py.File(args.output, 'w') as fd:
-        fd['x_train'] = ns.train_data.x
-        fd['y_train'] = ns.train_data.y
 
     if args.cache is None:
         logging.info('Nothing initialized!')
