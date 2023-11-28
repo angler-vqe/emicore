@@ -85,6 +85,8 @@ def namedtuple_as_dict(input):
         return {key: namedtuple_as_dict(value) for key, value in input.items()}
     if isinstance(input, (tuple, list)):
         return type(input)(namedtuple_as_dict(value) for value in input)
+    if hasattr(input, '_dictsource'):
+        return input._dictsource
     return input
 
 
