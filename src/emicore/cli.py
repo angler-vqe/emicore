@@ -361,7 +361,7 @@ class AcqParams(OptionParams):
     samplesize: int = 100, ''
     corethresh: PositiveFloat = 1.0, ''
     corethresh_width: int = 10, ''
-    core_trials: int = 10, ''
+    core_trials: int = 0, ''
     smo_steps: int = 100, ''
     smo_axis: click.BOOL = False, ''
 
