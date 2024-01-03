@@ -336,7 +336,7 @@ class QCParams(OptionParams):
 
 class KernelParams(OptionParams):
     sigma_0: PositiveFloat = None, 'Prior variance'
-    gamma: PositiveFloat = 1.0, 'Kernel width parameter'
+    gamma: PositiveFloat = 2.0, 'Kernel width parameter'
 
 
 class GPParams(OptionParams):
@@ -375,7 +375,7 @@ class HyperParams(OptionParams):
     threshold: PositiveFloat = 0.0, ''
     steps: int = 200, ''
     interval: str = '', ''
-    max_gamma: PositiveFloat = 10.0, ''
+    max_gamma: PositiveFloat = 20.0, ''
 
 
 class BOParams(OptionParams):
