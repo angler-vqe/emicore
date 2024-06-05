@@ -8,7 +8,7 @@ Circuits`` [[1]](#1).
 
 Clone the repository (or extract from the supplement of our paper):
 ```bash
-$ git clone git@github.com:nicoliKim/emicore.git emicore
+$ git clone git@github.com:angler-vqe/emicore.git emicore
 ```
 Move into the repository's directory and create a new python environment:
 ```bash
