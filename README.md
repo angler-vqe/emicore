@@ -1,4 +1,4 @@
-![image](./logo_expanded.png)
+![image](./logo_emicore.png)
 # EMICoRe: Expected Maximum Improvement over Confident Regions
 
 This is the repository for the NeurIPS 2023 paper ``Physics-Informed Bayesian Optimization of Variational Quantum 
